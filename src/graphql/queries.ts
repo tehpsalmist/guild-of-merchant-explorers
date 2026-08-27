@@ -136,7 +136,7 @@ export const LATEST_P2P_MESSAGE = gql`
         receiver_member_id: { _eq: $receivingMemberId }
       }
       limit: 1
-      order_by: { created_at: desc_nulls_last }
+      order_by: { id: desc }
     ) {
       id
       message

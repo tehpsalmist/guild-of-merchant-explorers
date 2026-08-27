@@ -113,17 +113,3 @@ export const SEND_P2P_MESSAGE = gql`
     }
   }
 `
-
-export const CLEANUP_HANDSHAKE_MESSAGES = gql`
-  mutation CleanUpMessages($roomId: Int!, $senderId: Int!, $receiverId: Int!) {
-    delete_p2p_message(
-      where: {
-        room_id: { _eq: $roomId }
-        sender_member_id: { _eq: $senderId }
-        receiver_member_id: { _eq: $receiverId }
-      }
-    ) {
-      affected_rows
-    }
-  }
-`

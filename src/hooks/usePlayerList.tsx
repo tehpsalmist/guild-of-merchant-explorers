@@ -30,5 +30,5 @@ export const usePlayerList = () => {
     setList(data.game_player.map((p) => p.player))
   }, [data])
 
-  return { list, userLookup: list.reduce((map, item) => ({ ...map, [item.id]: item }), {}) }
+  return { list, userLookup: list.reduce((map, item) => ({ ...map, [item.id]: item }), {} as Record<string, Player>) }
 }
