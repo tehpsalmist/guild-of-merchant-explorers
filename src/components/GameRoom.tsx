@@ -12,10 +12,16 @@ import { useApolloClient } from '@apollo/client'
 import { Button, copyText, TextArea } from '@8thday/react'
 import { P2PConnection } from '../p2p-connection/p2p-connection'
 
+interface ChatMessage {
+  message: string
+  id: number
+}
+
 export interface GameRoomProps extends ComponentProps<'main'> {}
 
 export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const [p2pRoom, setP2PRoom] = useState<P2PRoom>()
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const nhost = useNhostClient()
   const apollo = useApolloClient()
 
@@ -28,11 +34,24 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
 
   const room = data?.room_by_pk
 
+  const memberUserIdLookup = room?.members?.reduce((a, m) => ({...a, [m.id]:m.player_id}))??{}
+
   useEffect(() => {
     if (room && userId && nhost && apollo) {
-      setP2PRoom(new P2PRoom(room, userId, nhost, apollo))
+      const nextRoom = new P2PRoom(room, userId, nhost, apollo)
+      setP2PRoom(nextRoom)
+
+      return () => nextRoom.destroy()
     }
-  }, [room])
+  }, [room, userId, nhost, apollo])
+
+  useEffect(() => {
+    if (!p2pRoom) return
+
+    return p2pRoom.onMessages((newMessage) => {
+      setChatMessages((cms) => [...cms, newMessage])
+    })
+  }, [p2pRoom])
 
   if (!room) {
     return (
@@ -48,7 +67,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
       <div className="p-2">
         <h3 className="text-gray-600">Players</h3>
         <ul className="max-w-fit">
-          {room.members.map((m) => (
+          {room.members.map((m:any) => (
             <li key={m.player_id} className="flex items-center">
               <span className="mr-4">{userLookup[m.player_id]?.displayName}</span>
               {m.invite_accepted ? (
@@ -60,7 +79,31 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
           ))}
         </ul>
       </div>
-      {p2pRoom && [...p2pRoom.connections].map(([id, conn]) => <P2PConversation key={id} connection={conn} />)}
+      <div>
+        <h3>Conversation</h3>
+        <ul>
+          {chatMessages.map(({ id, message }, i) => (
+            <li key={`${id}-${i}`}>
+              <span>{userLookup[memberUserIdLookup[id]]?.displayName}:</span>
+              <span>{message}</span>
+            </li>
+          ))}
+          <TextArea
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+
+                if (!p2pRoom) return
+
+                const msg = e.currentTarget.value
+                p2pRoom?.sendMessages(JSON.stringify({ type: 'text-message', data: msg }))
+                setChatMessages((cms) => [...cms, { id: p2pRoom.myId, message: msg }])
+                e.currentTarget.value = ''
+              }
+            }}
+          />
+        </ul>
+      </div>
     </Main>
   )
 }
@@ -102,23 +145,12 @@ const P2PConversation = ({ connection }: { connection: P2PConnection }) => {
         onClick={async () => {
           const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
 
-          connection.peer.addStream(mediaStream)
+          connection.addStream(mediaStream)
         }}
       >
         Connect Audio
       </Button>
       <video ref={videoRef} autoPlay />
-      <TextArea
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            const msg = e.currentTarget.value
-            connection.sendMessage(JSON.stringify({ type: 'text-message', data: msg }))
-            setChatMessages((cms) => [...cms, msg])
-            e.currentTarget.value = ''
-          }
-        }}
-      />
       <ul>
         {chatMessages.map((msg) => (
           <li className="px-2 py-1 even:bg-gray-50" key={msg}>

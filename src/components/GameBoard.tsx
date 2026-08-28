@@ -20,9 +20,11 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const [investigateModalOpen, setInvestigateModalOpen] = useState(false)
   const [newTreasureCard, setNewTreasureCard] = useState(false)
   const [userPromptOpen, setUserPromptOpen] = useState(false)
+  const [viewedPlayerId, setViewedPlayerId] = useState<string>()
   const updateState = useState(0)[1]
 
   const { gameState, resetGame } = useGameState()
+  const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.activePlayer
 
   const treasureCards = gameState.activePlayer.treasureCards.keptCards.filter((c) => c.type !== 'jarMultiplier')
   const treasureJars = gameState.activePlayer.treasureCards.keptCards.filter((c) => c.type === 'jarMultiplier')
@@ -63,6 +65,17 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
       gameState.removeEventListener('onserialize', { handleEvent: serializationListener })
     }
   }, [gameState])
+
+  useEffect(() => {
+    setViewedPlayerId(gameState.activePlayer.id)
+  }, [gameState.activePlayer.id])
+
+  const viewNextPlayer = () => {
+    const currentIndex = gameState.players.indexOf(viewedPlayer)
+    const nextPlayer = gameState.players[(currentIndex + 1) % gameState.players.length]
+
+    if (nextPlayer) setViewedPlayerId(nextPlayer.id)
+  }
 
   useEffect(() => {
     const treasureListener = () => setNewTreasureCard(true)
@@ -206,12 +219,13 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
         </div>
       </div>
       <PlayerMessage className="fixed bottom-24 left-1/2 z-50 mt-2 w-max max-w-[95vw] -translate-x-1/2 rounded bg-slate-900/50 p-2 text-lg font-bold text-white" />
-      <main className={`${className} game-board-grid relative min-h-screen w-full`} {...props}>
-        <ExplorerMap key={gameState.activePlayer.id} player={gameState.activePlayer} isActive />
-        {gameState.players.map(
-          (player) =>
-            player !== gameState.activePlayer && <ExplorerMap key={player.id} player={player} isActive={false} />,
-        )}
+      <main className={`${className} game-board-grid relative w-full`} {...props}>
+        <ExplorerMap
+          key={viewedPlayer.id}
+          player={viewedPlayer}
+          isActive={viewedPlayer === gameState.activePlayer}
+          onViewNextPlayer={gameState.players.length > 1 ? viewNextPlayer : undefined}
+        />
         <div
           className={clsx(
             'fixed right-0 top-0 z-30 h-screen w-sm bg-gray-700/60 pt-16 transition-all duration-300',

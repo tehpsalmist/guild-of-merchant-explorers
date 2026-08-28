@@ -15,6 +15,8 @@ interface Room {
   }[]
 }
 
+type MessageCleanupFn = () => void
+
 export class P2PRoom implements Room {
   connections: Map<number, P2PConnection> = new Map()
   id: number
@@ -44,6 +46,29 @@ export class P2PRoom implements Room {
       if (member.id === this.myId || !member.invite_accepted) continue
 
       this.connections.set(member.id, new P2PConnection(this.myId, member.id, this.id, nhost, apollo))
+    }
+  }
+
+  onMessages(listener: (m: { id: number; message: string }) => void) {
+    const cleanups = new Set<MessageCleanupFn>()
+    for (const [memberId, connection] of this.connections.entries()) {
+      const listenerFn = (m: string) => {
+        listener({ id: memberId, message: m })
+      }
+      connection.on('message', listenerFn)
+      cleanups.add(() => !connection?.destroyed && connection?.off('message', listenerFn))
+    }
+
+    return () => {
+      for (const unsub of cleanups) {
+        unsub()
+      }
+    }
+  }
+
+  sendMessages(message: string) {
+    for (const [_, connection] of this.connections) {
+      connection.sendMessage(message)
     }
   }
 

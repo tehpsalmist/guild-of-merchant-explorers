@@ -1,485 +1,344 @@
-import { NhostClient } from '@nhost/react'
-import SimplePeer, { SignalData } from 'simple-peer'
-import { CLEANUP_HANDSHAKE_MESSAGES, SEND_P2P_MESSAGE } from '../graphql/mutations'
 import { ApolloClient } from '@apollo/client'
-import { LATEST_P2P_MESSAGE, P2P_MESSAGE_STREAM } from '../graphql/queries'
-import { toast } from '@8thday/react'
+import { NhostClient } from '@nhost/react'
 import { EventEmitter } from 'events'
+import SimplePeer, { SignalData } from 'simple-peer'
+import { SEND_P2P_MESSAGE } from '../graphql/mutations'
+import { LATEST_P2P_MESSAGE, P2P_MESSAGE_STREAM } from '../graphql/queries'
 
-type EventMap<T> = {
-  [K in keyof T]: T[K][]
+type PeerState = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+
+type SignalingMessage =
+  | { type: 'probe' }
+  | { type: 'ready'; nonce: string }
+  | { type: 'start'; sessionId: string }
+  | { type: 'signal'; sessionId: string; data: SignalData }
+
+type PeerEvents = {
+  message: [string]
+  stream: [MediaStream]
+  'handshake-state': [PeerState]
 }
 
-type PeerState =
-  | 'initializing'
-  | 'awaiting-online-confirmation'
-  | 'awaiting-offer'
-  | 'generating-offer'
-  | 'awaiting-answer'
-  | 'generating-answer'
-  | 'sent-answer'
-  | 'processing-answer'
-  | 'connected'
-  | 'closed'
-  | 'errored'
+type ServerEvents = {
+  message: [SignalingMessage]
+  error: [Error]
+}
 
-type ErrorCode =
-  | 'ERR_WEBRTC_SUPPORT'
-  | 'ERR_CREATE_OFFER'
-  | 'ERR_CREATE_ANSWER'
-  | 'ERR_SET_LOCAL_DESCRIPTION'
-  | 'ERR_SET_REMOTE_DESCRIPTION'
-  | 'ERR_ADD_ICE_CANDIDATE'
-  | 'ERR_ICE_CONNECTION_FAILURE'
-  | 'ERR_SIGNALING'
-  | 'ERR_DATA_CHANNEL'
-  | 'ERR_CONNECTION_FAILURE'
+export class P2PConnection extends EventEmitter<PeerEvents> {
+  readonly isInitiator: boolean
+  handshakeState: PeerState = 'connecting'
+  private peer?: SimplePeer.Instance
 
-type AnswerSignalData = Omit<Extract<SignalData, { type: RTCSdpType }>, 'type'> & { type: 'answer' }
-type OfferSignalData = Omit<Extract<SignalData, { type: RTCSdpType }>, 'type'> & { type: 'offer' }
-
-type Message =
-  | AnswerSignalData
-  | OfferSignalData
-  | { type: 'online' }
-  | { type: 'offer-generated'; data: SignalData }
-  | { type: 'error'; code?: ErrorCode }
-  | { type: 'close' }
-
-export class P2PConnection extends EventEmitter<
-  EventMap<{ message: string; stream: MediaStream; 'handshake-state': PeerState }>
-> {
-  myId: number
-  memberId: number
-  roomId: number
-
-  nhost: NhostClient
-  apollo: ApolloClient<any>
-
-  isInitiator: boolean
-
-  handshakeState: PeerState = 'initializing'
-
-  generatedOffer: SignalData | null = null
-
-  peer: SimplePeer.Instance
-
-  serverConnection: ServerConnection
-
-  connAbortController: AbortController | null = null
-
+  private readonly serverConnection: ServerConnection
+  private readonly localStreams = new Set<MediaStream>()
+  private sessionId?: string
+  private readyNonce?: string
+  private lastReadyNonce?: string
+  private reconnectTimer?: ReturnType<typeof setTimeout>
   destroyed = false
 
-  constructor(myId: number, memberId: number, roomId: number, nhost: NhostClient, apollo: ApolloClient<any>) {
+  constructor(
+    readonly myId: number,
+    readonly memberId: number,
+    readonly roomId: number,
+    nhost: NhostClient,
+    apollo: ApolloClient<any>,
+  ) {
     super()
 
-    this.myId = myId
-    this.memberId = memberId
-    this.roomId = roomId
-
-    this.isInitiator = this.myId < this.memberId
-
-    this.nhost = nhost
-    this.apollo = apollo
-
+    this.isInitiator = myId < memberId
     this.serverConnection = new ServerConnection(nhost, apollo, myId, memberId, roomId)
-    this.setupPeer()
+    this.serverConnection.on('message', (message) => this.handleServerMessage(message))
+    this.serverConnection.on('error', (error) => this.handleFailure(error))
 
-    this.connect().catch((e) => {
-      if (e === 'timedout') return this.reconnect()
-      console.error(e)
-    })
+    this.connectToCoordinator()
   }
 
-  async connect() {
-    if (this.connAbortController && !this.connAbortController.signal.aborted) {
-      this.connAbortController.abort()
+  sendMessage(message: string) {
+    if (!this.peer?.connected) {
+      return this.connectToCoordinator()
     }
 
-    this.connAbortController = new AbortController()
-
-    this.updateHandshakeState('awaiting-online-confirmation')
-
-    await this.serverConnection.connectToServer()
-    if (this.connAbortController.signal.aborted) return
-
-    this.sendServerMessage({ type: 'online' })
-
-    if (this.isInitiator) {
-      const isOnline = await this.waitForPeerMessage('online')
-      if (this.connAbortController.signal.aborted) return
-
-      if (isOnline.type !== 'online') {
-        throw new Error(`bad message! expected "online" and got ${isOnline.type}`)
-      }
-
-      const offer = await this.generateOffer()
-      if (this.connAbortController.signal.aborted) return
-
-      this.sendServerMessage(offer)
-
-      const answer = await this.waitForPeerMessage('answer')
-      if (this.connAbortController.signal.aborted) return
-
-      if (answer.type !== 'answer') {
-        throw new Error(`bad message! expected "answer" and got ${isOnline.type}`)
-      }
-
-      this.updateHandshakeState('processing-answer')
-
-      this.peer.signal(answer)
-    } else {
-      const offer = await this.waitForOffer()
-      if (this.connAbortController.signal.aborted) return
-
-      if (offer.type !== 'offer') {
-        throw new Error(`bad message! expected "offer" and got ${offer.type}`)
-      }
-
-      const answer = await this.generateAnswerFromOffer(offer)
-
-      this.sendServerMessage(answer)
-    }
-
-    console.log('process complete, awaiting connection')
-    this.connAbortController = null
-
-    setTimeout(() => {
-      if (!this.peer.connected && this.handshakeState === (this.isInitiator ? 'processing-answer' : 'sent-answer')) {
-        this.reconnect()
-      }
-    }, 60000)
-  }
-
-  reconnect() {
-    this.updateHandshakeState('initializing')
-    this.setupPeer()
-    this.connect().catch((e) => {
-      if (e === 'timedout') {
-        return this.reconnect()
-      }
-      console.error('trouble reconnecting', e)
-    })
-  }
-
-  sendMessage(message: any) {
     this.peer.send(message)
   }
 
-  async waitForOffer() {
-    this.updateHandshakeState('awaiting-offer')
+  addStream(stream: MediaStream) {
+    if (this.localStreams.has(stream)) return
 
-    const offerPromise = this.waitForPeerMessage('offer')
-
-    let cleanedUp = false
-    const onlinePromise = this.waitForPeerMessage('online').catch(() => {})
-
-    onlinePromise.then(() => {
-      if (cleanedUp) return
-
-      this.sendServerMessage({ type: 'online' })
-    })
-
-    return offerPromise.then((offer) => {
-      // cleanup
-      cleanedUp = true
-
-      return offer
-    })
+    this.localStreams.add(stream)
+    if (this.peer && !this.peer.destroyed) this.peer.addStream(stream)
   }
 
-  async setupPeer() {
-    if (this.peer && !this.peer.destroyed) {
-      this.generatedOffer = null
-      this.peer.removeAllListeners()
-      this.peer.destroy()
+  destroy() {
+    if (this.destroyed) return
+
+    this.destroyed = true
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.updateHandshakeState('closed')
+    this.destroyPeer()
+    this.serverConnection.destroy()
+    this.removeAllListeners()
+  }
+
+  private async connectToCoordinator() {
+    try {
+      await this.serverConnection.connect()
+      if (this.destroyed) return
+
+      if (this.isInitiator) {
+        await this.serverConnection.send({ type: 'probe' })
+      } else {
+        await this.announceReady()
+      }
+    } catch (error) {
+      this.handleFailure(error)
     }
+  }
 
-    this.peer = new SimplePeer({ initiator: true })
+  private handleServerMessage(message: SignalingMessage) {
+    if (this.destroyed) return
 
-    this.peer.setDefaultEncoding('utf-8')
+    switch (message.type) {
+      case 'probe':
+        if (!this.isInitiator) this.announceReady(false).catch((error) => this.handleFailure(error))
+        break
+      case 'ready':
+        if (this.isInitiator && message.nonce !== this.lastReadyNonce) {
+          this.lastReadyNonce = message.nonce
+          this.startSession()
+        }
+        break
+      case 'start':
+        if (!this.isInitiator) {
+          this.sessionId = message.sessionId
+          this.setupPeer()
+        }
+        break
+      case 'signal':
+        if (message.sessionId !== this.sessionId || !this.peer) return
 
-    this.peer.on('data', (d) => {
-      const { type, data } = this.parseIncomingData(d)
-      console.log('data from', this.memberId, d)
-      if (type === 'text-message') {
-        this.emit('message', data)
+        try {
+          this.peer.signal(message.data)
+        } catch (error) {
+          this.handleFailure(error)
+        }
+        break
+    }
+  }
+
+  private async announceReady(useNewNonce = true) {
+    if (useNewNonce || !this.readyNonce) this.readyNonce = createId()
+    await this.serverConnection.send({ type: 'ready', nonce: this.readyNonce })
+  }
+
+  private async startSession() {
+    const sessionId = createId()
+    this.sessionId = sessionId
+
+    try {
+      // Persist the session marker before SimplePeer starts emitting signals.
+      await this.serverConnection.send({ type: 'start', sessionId })
+      if (this.destroyed || this.sessionId !== sessionId) return
+      this.setupPeer()
+    } catch (error) {
+      this.handleFailure(error)
+    }
+  }
+
+  private setupPeer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = undefined
+    }
+    this.destroyPeer()
+    this.updateHandshakeState(this.handshakeState === 'connecting' ? 'connecting' : 'reconnecting')
+
+    const peer = new SimplePeer({
+      initiator: this.isInitiator,
+      streams: [...this.localStreams],
+    })
+    this.peer = peer
+    peer.setDefaultEncoding('utf-8')
+
+    peer.on('signal', (data) => {
+      if (peer !== this.peer || !this.sessionId) return
+      this.serverConnection
+        .send({ type: 'signal', sessionId: this.sessionId, data })
+        .catch((error) => this.handleFailure(error))
+    })
+
+    peer.on('connect', () => {
+      if (peer === this.peer) this.updateHandshakeState('connected')
+    })
+
+    peer.on('data', (data) => {
+      if (peer !== this.peer) return
+
+      try {
+        const message = JSON.parse(data.toString())
+        if (message.type === 'text-message' && typeof message.data === 'string') this.emit('message', message.data)
+      } catch {
+        // Ignore data that does not use this application's message format.
       }
     })
 
-    this.peer.on('connect', () => {
-      this.updateHandshakeState('connected')
+    peer.on('stream', (stream) => {
+      if (peer === this.peer) this.emit('stream', stream)
+    })
 
-      this.nhost.graphql.request(CLEANUP_HANDSHAKE_MESSAGES, {
+    peer.on('error', (error) => {
+      if (peer === this.peer) this.handleFailure(error)
+    })
+
+    peer.on('close', () => {
+      if (peer === this.peer) this.scheduleReconnect()
+    })
+  }
+
+  private destroyPeer() {
+    const peer = this.peer
+    this.peer = undefined
+    if (!peer) return
+
+    peer.removeAllListeners()
+    if (!peer.destroyed) peer.destroy()
+  }
+
+  private handleFailure(error: unknown) {
+    if (this.destroyed) return
+    console.error(`P2P connection to member ${this.memberId} failed`, error)
+    this.scheduleReconnect()
+  }
+
+  private scheduleReconnect() {
+    if (this.destroyed || this.reconnectTimer) return
+
+    this.destroyPeer()
+    this.sessionId = undefined
+    this.updateHandshakeState('reconnecting')
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined
+      if (this.isInitiator) this.lastReadyNonce = undefined
+      this.connectToCoordinator()
+    }, 1000)
+  }
+
+  private updateHandshakeState(state: PeerState) {
+    if (this.handshakeState === state) return
+    this.handshakeState = state
+    this.emit('handshake-state', state)
+  }
+}
+
+class ServerConnection extends EventEmitter<ServerEvents> {
+  private subscription?: { unsubscribe(): void; closed?: boolean }
+  private connectPromise?: Promise<void>
+  private sendQueue: Promise<void> = Promise.resolve()
+  private destroyed = false
+
+  constructor(
+    private readonly nhost: NhostClient,
+    private readonly apollo: ApolloClient<any>,
+    private readonly myId: number,
+    private readonly memberId: number,
+    private readonly roomId: number,
+  ) {
+    super()
+  }
+
+  connect() {
+    if (this.destroyed) return Promise.reject(new Error('Signaling connection is closed'))
+    if (this.subscription && !this.subscription.closed) return Promise.resolve()
+    if (this.connectPromise) return this.connectPromise
+
+    this.connectPromise = this.openSubscription().finally(() => {
+      this.connectPromise = undefined
+    })
+    return this.connectPromise
+  }
+
+  send(message: SignalingMessage) {
+    const request = this.sendQueue.then(async () => {
+      if (this.destroyed) throw new Error('Signaling connection is closed')
+
+      const { error } = await this.nhost.graphql.request(SEND_P2P_MESSAGE, {
+        message,
         senderId: this.myId,
         receiverId: this.memberId,
         roomId: this.roomId,
       })
-
-      this.serverConnection.disconnectFromServer()
+      if (error) throw error
     })
 
-    this.peer.on('stream', (stream) => {
-      this.emit('stream', stream)
-    })
-
-    this.peer.on('signal', (data) => {
-      this.sendServerMessage(data)
-    })
-
-    this.peer.on('error', (err: any) => {
-      console.log('err', err.code, err)
-
-      if (this.connAbortController && !this.connAbortController.signal.aborted) {
-        this.connAbortController.abort()
-      }
-
-      if (err.code === 'ERR_ICE_CONNECTION_FAILURE') {
-        this.sendServerMessage({ type: 'error', code: err.code })
-      }
-    })
-
-    this.peer.on('close', () => {
-      console.log('close', this.destroyed)
-      if (this.destroyed) return
-
-      this.reconnect()
-    })
-  }
-
-  waitForPeerMessage<T extends Message['type']>(event: T, timeout = 30000): Promise<Extract<Message, { type: T }>> {
-    return new Promise((res, rej) => {
-      const timer = setTimeout(() => {
-        this.serverConnection.off(event as Message['type'], eventListener)
-        rej('timedout')
-      }, timeout)
-
-      const eventListener = (m) => {
-        clearTimeout(timer)
-        this.serverConnection.off(event as Message['type'], eventListener)
-        res(m)
-      }
-
-      this.serverConnection.on(event as Message['type'], eventListener)
-    })
-  }
-
-  parseIncomingData(d: Uint8Array) {
-    const rawData = d.toString()
-
-    try {
-      const parsed = JSON.parse(rawData)
-
-      switch (parsed.type) {
-        case 'text-message':
-          return parsed
-        default:
-          return { type: 'unknown-data', data: rawData }
-      }
-    } catch (e) {
-      console.log(e, rawData)
-      return { type: 'bad-data', data: rawData }
-    }
-  }
-
-  updateHandshakeState(newState: PeerState) {
-    this.handshakeState = newState
-    this.emit('handshake-state', newState)
-  }
-
-  async generateOffer(timeout = 10000): Promise<SignalData> {
-    this.updateHandshakeState('generating-offer')
-
-    if (this.generatedOffer) {
-      this.updateHandshakeState('awaiting-answer')
-      return this.generatedOffer
-    }
-
-    return new Promise((res, rej) => {
-      let offered = false
-      const timer = setTimeout(() => {
-        this.peer.off('signal', offerListener)
-        this.peer.off('close', closeListener)
-        rej('timedout')
-      }, timeout)
-
-      const offerListener = (data: SignalData) => {
-        if (data.type === 'offer' && !offered) {
-          this.peer.off('signal', offerListener)
-          this.peer.off('close', closeListener)
-          clearTimeout(timer)
-
-          this.updateHandshakeState('awaiting-answer')
-
-          offered = true
-          this.generatedOffer = data
-          res(data)
-        }
-      }
-
-      const closeListener = () => {
-        this.peer.off('signal', offerListener)
-        this.peer.off('close', closeListener)
-        clearTimeout(timer)
-
-        rej('peer closed')
-      }
-
-      this.peer.on('signal', offerListener)
-      this.peer.on('close', closeListener)
-    })
-  }
-
-  generateAnswerFromOffer(offer: OfferSignalData, timeout = 10000): Promise<SignalData> {
-    this.updateHandshakeState('generating-answer')
-
-    return new Promise((res, rej) => {
-      let answered = false
-      const timer = setTimeout(() => {
-        this.peer.off('signal', answerListener)
-        this.peer.off('close', closeListener)
-        rej('timedout')
-      }, timeout)
-
-      const answerListener = (data: SignalData) => {
-        if (this.peer.connected) {
-          return rej('connected')
-        }
-
-        if (data.type === 'answer' && !answered) {
-          this.peer.off('signal', answerListener)
-          this.peer.off('close', closeListener)
-          clearTimeout(timer)
-
-          this.updateHandshakeState('sent-answer')
-
-          answered = true
-          res(data)
-        }
-      }
-
-      const closeListener = () => {
-        this.peer.off('signal', answerListener)
-        this.peer.off('close', closeListener)
-        clearTimeout(timer)
-
-        rej('peer closed')
-      }
-
-      this.peer.on('signal', answerListener)
-      this.peer.on('close', closeListener)
-
-      this.peer.signal(offer)
-    })
-  }
-
-  sendServerMessage(message: any) {
-    return this.nhost.graphql.request(SEND_P2P_MESSAGE, {
-      message,
-      senderId: this.myId,
-      receiverId: this.memberId,
-      roomId: this.roomId,
-    })
+    // Keep later messages moving even if one request fails.
+    this.sendQueue = request.catch(() => {})
+    return request
   }
 
   destroy() {
     this.destroyed = true
-    this.serverConnection.destroy()
-    this.peer?.destroy()
+    this.subscription?.unsubscribe()
+    this.subscription = undefined
     this.removeAllListeners()
   }
-}
 
-type EventMapForMessage = {
-  [K in Message as K['type']]: Extract<Message, { type: K['type'] }>
-}
-
-class ServerConnection extends EventEmitter<EventMap<EventMapForMessage>> {
-  nhost: NhostClient
-  apollo: ApolloClient<any>
-  myId: number
-  memberId: number
-  roomId: number
-
-  serverSubscription?: { unsubscribe(): void; closed?: boolean } | null = null
-
-  destroyed = false
-
-  constructor(nhost: NhostClient, apollo: ApolloClient<any>, myId: number, memberId: number, roomId: number) {
-    super()
-
-    this.nhost = nhost
-    this.apollo = apollo
-    this.myId = myId
-    this.memberId = memberId
-    this.roomId = roomId
-
-    this.connectToServer()
-  }
-
-  async connectToServer(force = false) {
-    if (this.serverSubscription && !this.serverSubscription.closed) {
-      if (force) {
-        this.serverSubscription.unsubscribe()
-      } else {
-        return
-      }
-    }
-
+  private async openSubscription() {
     const { data, error } = await this.nhost.graphql.request(LATEST_P2P_MESSAGE, {
       roomId: this.roomId,
       sendingMemberId: this.memberId,
       receivingMemberId: this.myId,
     })
+    if (error) throw error
+    if (this.destroyed) return
 
-    if (error) {
-      console.error(error)
-      toast.error({
-        message: `Cannot connect to member ${this.memberId}`,
-        description: 'Funny thing about shaking hands...you need hands!',
-      })
-
-      return error
-    }
-
-    const latestMessage = data?.p2p_message?.[0]
-
-    this.serverSubscription = this.apollo
+    this.subscription = this.apollo
       .subscribe({
         query: P2P_MESSAGE_STREAM,
         variables: {
           roomId: this.roomId,
           sendingMemberId: this.memberId,
           receivingMemberId: this.myId,
-          latestId: latestMessage?.id ?? 0,
+          latestId: data?.p2p_message?.[0]?.id ?? 0,
         },
       })
-      .subscribe((result) => {
-        if (result?.errors) {
-          // handle errored state
-          console.error('subscription error:', result.errors)
-        }
-        console.log('incoming data', JSON.stringify(data, null, 2))
-
-        const message: Message = result?.data?.p2p_message_stream?.[0].message
-
-        if (message?.type) {
-          this.emit(message.type, message as Extract<Message, keyof typeof message.type>)
-        }
+      .subscribe({
+        next: (result) => {
+          const rows = result.data?.p2p_message_stream ?? []
+          for (const row of rows) {
+            if (isSignalingMessage(row.message)) this.emit('message', row.message)
+          }
+        },
+        error: (subscriptionError) => {
+          this.subscription = undefined
+          this.emit('error', toError(subscriptionError))
+        },
       })
-
-    return null
   }
+}
 
-  disconnectFromServer() {
-    this.serverSubscription?.unsubscribe()
-    this.serverSubscription = null
-  }
+function isSignalingMessage(value: unknown): value is SignalingMessage {
+  if (!value || typeof value !== 'object' || !('type' in value)) return false
+  const message = value as Record<string, unknown>
 
-  destroy() {
-    this.destroyed = true
-    this.serverSubscription?.unsubscribe()
-    this.serverSubscription = null
-    this.removeAllListeners()
+  switch (message.type) {
+    case 'probe':
+      return true
+    case 'ready':
+      return typeof message.nonce === 'string'
+    case 'start':
+      return typeof message.sessionId === 'string'
+    case 'signal':
+      return typeof message.sessionId === 'string' && !!message.data && typeof message.data === 'object'
+    default:
+      return false
   }
+}
+
+function toError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
+function createId() {
+  return crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-')
 }
