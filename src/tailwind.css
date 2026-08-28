@@ -38,7 +38,14 @@ em {
 
 @layer components {
   .game-board-grid {
-    @apply grid grid-cols-1 pt-16;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 4rem;
   }
 
   .link-on-light {
@@ -57,5 +64,11 @@ em {
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none; /* Safari and Chrome */
+  }
+
+  .board-pan-viewport {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
   }
 }
