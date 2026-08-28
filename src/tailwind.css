@@ -67,8 +67,7 @@ em {
   }
 
   .board-pan-viewport {
-    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    touch-action: pan-x pan-y;
+    touch-action: none;
   }
 }

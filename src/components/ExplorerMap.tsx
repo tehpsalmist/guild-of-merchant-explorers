@@ -1,4 +1,4 @@
-import React, { ComponentProps, PointerEvent as ReactPointerEvent, useRef, useState } from 'react'
+import React, { ComponentProps, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
 import { HexPath } from './HexPath'
 import { useGameState } from '../hooks/useGameState'
 import { useResizeObserver } from '@8thday/react'
@@ -14,14 +14,20 @@ const MAGIC_OFFSET_VALUE_Y = 43.3
 const HEX_WIDTH = 75
 const HEX_HEIGHT = 86.6
 const MIN_BOARD_WIDTH = 800
+const MAX_ZOOM = 2.5
+const WHEEL_ZOOM_SENSITIVITY = 0.0015
 
 interface PanMetrics {
+  baseBoardWidth: number
+  baseBoardHeight: number
   boardWidth: number
   boardHeight: number
   paddingX: number
   paddingY: number
   viewportWidth: number
   viewportHeight: number
+  minZoom: number
+  zoom: number
 }
 
 interface PointerDrag {
@@ -32,6 +38,21 @@ interface PointerDrag {
   scrollTop: number
   dragging: boolean
 }
+
+interface PointerPosition {
+  x: number
+  y: number
+}
+
+interface PinchGesture {
+  pointerIds: [number, number]
+  startDistance: number
+  startZoom: number
+  boardX: number
+  boardY: number
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 export interface ExplorerMapProps extends ComponentProps<'div'> {
   player: Player
@@ -47,6 +68,8 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   const panSurfaceRef = useRef<HTMLDivElement>(null)
   const panMetricsRef = useRef<PanMetrics | null>(null)
   const pointerDragRef = useRef<PointerDrag | null>(null)
+  const pointerPositionsRef = useRef(new Map<number, PointerPosition>())
+  const pinchGestureRef = useRef<PinchGesture | null>(null)
   const suppressClickRef = useRef(false)
   const containerRef = useResizeObserver<HTMLDivElement>(() => {
     if (!boardRef.current || !panSurfaceRef.current || !containerRef.current) return
@@ -76,8 +99,12 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
 
     // The board starts at the full viewport width instead of shrinking to fit both dimensions.
     // Its aspect ratio remains unchanged, and the pan surface handles any resulting vertical overflow.
-    const boardWidth = Math.max(width, MIN_BOARD_WIDTH)
-    const boardHeight = boardWidth / boardRatio
+    const baseBoardWidth = Math.max(width, MIN_BOARD_WIDTH)
+    const baseBoardHeight = baseBoardWidth / boardRatio
+    const minZoom = Math.min(1, width / baseBoardWidth, height / baseBoardHeight)
+    const zoom = clamp(previousMetrics?.zoom ?? 1, minZoom, MAX_ZOOM)
+    const boardWidth = baseBoardWidth * zoom
+    const boardHeight = baseBoardHeight * zoom
     // A half-viewport buffer lets either edge of the board be panned all the way to the viewport center.
     const paddingX = width / 2
     const paddingY = height / 2
@@ -87,21 +114,122 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
     panSurfaceRef.current.style.padding = `${paddingY}px ${paddingX}px`
 
     panMetricsRef.current = {
+      baseBoardWidth,
+      baseBoardHeight,
       boardWidth,
       boardHeight,
       paddingX,
       paddingY,
       viewportWidth: width,
       viewportHeight: height,
+      minZoom,
+      zoom,
     }
 
     containerRef.current.scrollLeft = paddingX + focusX * boardWidth - width / 2
     containerRef.current.scrollTop = paddingY + focusY * boardHeight - height / 2
   })
 
+  const zoomBoardAt = (
+    requestedZoom: number,
+    viewportX: number,
+    viewportY: number,
+    boardX?: number,
+    boardY?: number,
+  ) => {
+    const container = containerRef.current
+    const board = boardRef.current
+    const metrics = panMetricsRef.current
+
+    if (!container || !board || !metrics) return
+
+    const zoom = clamp(requestedZoom, metrics.minZoom, MAX_ZOOM)
+    if (Math.abs(zoom - metrics.zoom) < 0.0001) return
+
+    const anchorX = boardX ?? clamp((container.scrollLeft + viewportX - metrics.paddingX) / metrics.boardWidth, 0, 1)
+    const anchorY = boardY ?? clamp((container.scrollTop + viewportY - metrics.paddingY) / metrics.boardHeight, 0, 1)
+    const boardWidth = metrics.baseBoardWidth * zoom
+    const boardHeight = metrics.baseBoardHeight * zoom
+
+    board.style.width = `${boardWidth}px`
+    board.style.height = `${boardHeight}px`
+
+    metrics.boardWidth = boardWidth
+    metrics.boardHeight = boardHeight
+    metrics.zoom = zoom
+
+    container.scrollLeft = metrics.paddingX + anchorX * boardWidth - viewportX
+    container.scrollTop = metrics.paddingY + anchorY * boardHeight - viewportY
+  }
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      const metrics = panMetricsRef.current
+      if (!metrics) return
+
+      const rect = container.getBoundingClientRect()
+      const deltaMultiplier =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? rect.height
+            : 1
+      const delta = (event.deltaY || event.deltaX) * deltaMultiplier
+
+      zoomBoardAt(
+        metrics.zoom * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      )
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
+  }, [])
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    // Touch uses the browser's native inertial two-dimensional scrolling.
-    if (!event.isPrimary || event.button !== 0 || event.pointerType === 'touch') return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+
+    const pointers = pointerPositionsRef.current
+    if (pointers.size >= 2) return
+
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    if (pointers.size === 2) {
+      const [[firstId, first], [secondId, second]] = Array.from(pointers.entries())
+      const metrics = panMetricsRef.current
+      const rect = event.currentTarget.getBoundingClientRect()
+
+      if (!metrics) return
+
+      const midpointX = (first.x + second.x) / 2 - rect.left
+      const midpointY = (first.y + second.y) / 2 - rect.top
+
+      pinchGestureRef.current = {
+        pointerIds: [firstId, secondId],
+        startDistance: Math.hypot(second.x - first.x, second.y - first.y),
+        startZoom: metrics.zoom,
+        boardX: clamp((event.currentTarget.scrollLeft + midpointX - metrics.paddingX) / metrics.boardWidth, 0, 1),
+        boardY: clamp((event.currentTarget.scrollTop + midpointY - metrics.paddingY) / metrics.boardHeight, 0, 1),
+      }
+      pointerDragRef.current = null
+
+      for (const pointerId of [firstId, secondId]) {
+        if (!event.currentTarget.hasPointerCapture(pointerId)) event.currentTarget.setPointerCapture(pointerId)
+      }
+
+      setIsDragging(true)
+      event.preventDefault()
+      return
+    }
+
+    if (pointers.size !== 1) return
 
     pointerDragRef.current = {
       pointerId: event.pointerId,
@@ -114,6 +242,28 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   }
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pointers = pointerPositionsRef.current
+    if (!pointers.has(event.pointerId)) return
+
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+
+    const pinch = pinchGestureRef.current
+    if (pinch) {
+      const first = pointers.get(pinch.pointerIds[0])
+      const second = pointers.get(pinch.pointerIds[1])
+
+      if (!first || !second || !pinch.startDistance) return
+
+      const rect = event.currentTarget.getBoundingClientRect()
+      const midpointX = (first.x + second.x) / 2 - rect.left
+      const midpointY = (first.y + second.y) / 2 - rect.top
+      const distance = Math.hypot(second.x - first.x, second.y - first.y)
+
+      zoomBoardAt(pinch.startZoom * (distance / pinch.startDistance), midpointX, midpointY, pinch.boardX, pinch.boardY)
+      event.preventDefault()
+      return
+    }
+
     const drag = pointerDragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
 
@@ -134,7 +284,43 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   }
 
   const endPointerDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pointers = pointerPositionsRef.current
+    if (!pointers.has(event.pointerId)) return
+
+    const wasPinching = pinchGestureRef.current !== null
     const drag = pointerDragRef.current
+
+    pointers.delete(event.pointerId)
+
+    if (wasPinching) {
+      suppressClickRef.current = true
+      window.setTimeout(() => {
+        suppressClickRef.current = false
+      }, 0)
+      pinchGestureRef.current = null
+
+      const remainingPointer = Array.from(pointers.entries())[0]
+      if (remainingPointer) {
+        const [pointerId, position] = remainingPointer
+        pointerDragRef.current = {
+          pointerId,
+          startX: position.x,
+          startY: position.y,
+          scrollLeft: event.currentTarget.scrollLeft,
+          scrollTop: event.currentTarget.scrollTop,
+          dragging: true,
+        }
+      } else {
+        pointerDragRef.current = null
+        setIsDragging(false)
+      }
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      return
+    }
+
     if (!drag || drag.pointerId !== event.pointerId) return
 
     if (drag.dragging) {
@@ -155,11 +341,9 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
 
   return (
     <div
-      className={clsx(
-        className,
-        'relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-left',
-        { 'opacity-70': !isActive },
-      )}
+      className={clsx(className, 'relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-left', {
+        'opacity-70': !isActive,
+      })}
       style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
       {...props}
     >
