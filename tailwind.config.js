@@ -6,6 +6,9 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      screens: {
+        ph: { raw: '(max-width: 768px) and (max-height: 768px)' },
+      },
       colors: {
         primary: colors.blue,
         secondary: {

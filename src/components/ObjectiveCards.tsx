@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import React, { ComponentProps, useEffect, useState } from 'react'
 import { useGameState } from '../hooks/useGameState'
-import { blockImage, era2Blocker, era3Blocker, eraAnyBlocker } from '../images'
+import { era2Blocker, era3Blocker, eraAnyBlocker } from '../images'
 import { useEventListener } from '@8thday/react'
 import { ExplorerBlock } from './ExplorerBlock'
 import { audioTools, uiCardCloseSound, uiCardOpenSound } from '../audio'
@@ -50,53 +50,76 @@ export const ObjectiveCards = ({ className = '', ...props }: ObjectiveCardsProps
     >
       {gameState.objectives.map((card, i) =>
         card ? (
-          <div key={i} className="relative w-full max-w-1/4">
-            <img src={card.imageUrl.href} className="w-full rounded-2xl" />
+          <div key={i} className="relative aspect-[1042/744] w-full max-w-1/4 shrink-0">
+            <img
+              src={card.imageUrl.href}
+              className="absolute inset-0 block h-full w-full object-contain"
+              draggable={false}
+            />
             {card.isFirstBlocked && i === 0 && (
               <img
                 src={era2Blocker.href}
                 alt="era 2 objective blocker"
-                className={clsx('absolute left-1/5 top-1/2 h-1/3')}
+                className="absolute left-1/5 top-1/2 h-1/3 w-auto max-w-none object-contain"
+                draggable={false}
               />
             )}
             {card.isSecondBlocked && i === 0 && (
               <img
                 src={era3Blocker.href}
                 alt="era 3 objective blocker"
-                className={clsx('absolute right-1/5 top-1/2 h-1/3')}
+                className="absolute right-1/5 top-1/2 h-1/3 w-auto max-w-none object-contain"
+                draggable={false}
               />
             )}
             {card.isFirstBlocked && i === 1 && (
               <img
                 src={era3Blocker.href}
                 alt="era 3 objective blocker"
-                className={clsx('absolute left-1/5 top-1/2 h-1/3')}
+                className="absolute left-1/5 top-1/2 h-1/3 w-auto max-w-none object-contain"
+                draggable={false}
               />
             )}
             {card.isSecondBlocked && i === 1 && (
               <img
                 src={eraAnyBlocker.href}
                 alt="era any objective blocker"
-                className={clsx('absolute right-1/5 top-1/2 h-1/3')}
+                className="absolute right-1/5 top-1/2 h-1/3 w-auto max-w-none object-contain"
+                draggable={false}
               />
             )}
             {card.isFirstBlocked && i === 2 && (
               <img
                 src={eraAnyBlocker.href}
                 alt="era any objective blocker"
-                className={clsx('absolute left-1/5 top-1/2 h-1/3')}
+                className="absolute left-1/5 top-1/2 h-1/3 w-auto max-w-none object-contain"
+                draggable={false}
               />
             )}
-            <div className="absolute left-1/4 top-1/2 grid h-1/6 -translate-y-1/2 grid-cols-2 gap-2">
-              {card.firstPlayers.map((p) => (
-                <ExplorerBlock key={p.id} color={p.color} className="h-10" />
-              ))}
-            </div>
-            <div className="absolute right-1/4 top-1/2 grid h-1/6 -translate-y-1/2 grid-cols-2 gap-2">
-              {card.secondPlayers.map((p) => (
-                <ExplorerBlock key={p.id} color={p.color} className="h-8" />
-              ))}
-            </div>
+            {[
+              { id: 'first', players: card.firstPlayers, position: 'left-[24%]' },
+              { id: 'second', players: card.secondPlayers, position: 'right-[24%]' },
+            ].map(({ id, players, position }) =>
+              players.length ? (
+                <div
+                  key={id}
+                  className={clsx('absolute top-[41.5%] grid h-[17%] w-[16%] place-items-center gap-[4%]', position)}
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.min(players.length, 2)}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.ceil(players.length / 2)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {players.map((player) => (
+                    <ExplorerBlock
+                      key={player.id}
+                      color={player.color}
+                      className="block h-full w-full object-contain"
+                      draggable={false}
+                    />
+                  ))}
+                </div>
+              ) : null,
+            )}
           </div>
         ) : (
           <div key={i} className="w-full max-w-1/4" />

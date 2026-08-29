@@ -218,7 +218,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
           </div>
         </div>
       </div>
-      <PlayerMessage className="fixed bottom-24 left-1/2 z-50 mt-2 w-max max-w-[95vw] -translate-x-1/2 rounded bg-slate-900/50 p-2 text-lg font-bold text-white" />
+      <PlayerMessage className="fixed bottom-2 right-2 z-50 w-max max-w-[95vw] rounded bg-slate-900/50 p-2 text-lg font-bold text-white ph:text-sm" />
       <main className={`${className} game-board-grid relative w-full`} {...props}>
         <ExplorerMap
           key={viewedPlayer.id}

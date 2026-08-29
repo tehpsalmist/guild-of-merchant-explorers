@@ -1,4 +1,4 @@
-import React, { ComponentProps, useState } from 'react'
+import React, { ComponentProps, useLayoutEffect, useState } from 'react'
 import { BoardName, PlayerInputs } from '../game-logic/GameState'
 import { GameStateProvider } from '../hooks/useGameState'
 import { GameBoard } from './GameBoard'
@@ -8,10 +8,12 @@ import clsx from 'clsx'
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ColorPicker } from './ColorPicker'
 import { Main } from '../design-system/Main'
+import { useGameNavigation } from '../hooks/useGameNavigation'
 
 export interface LocalGameProps extends ComponentProps<'main'> {}
 
 export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
+  const setGameActive = useGameNavigation()
   const [boardName, setBoardName] = useRememberedState<BoardName | ''>('gome-board-name', '')
   const [playerData, setPlayerData] = useRememberedState<PlayerInputs[]>('gome-player-data', [{ id: '', color: '' }])
   const [readyToPlay, setReadyToPlay] = useRememberedState('gome-ready-to-play', false)
@@ -22,7 +24,15 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
 
   const disabled = !boardName || !playerData?.length || playerData.some(({ id, color }) => !id || !color) || hasDupes
 
-  if (!readyToPlay || disabled)
+  const gameActive = readyToPlay && !disabled
+
+  useLayoutEffect(() => {
+    setGameActive(gameActive)
+
+    return () => setGameActive(false)
+  }, [gameActive, setGameActive])
+
+  if (!gameActive)
     return (
       <Main className={clsx(className, 'flex flex-col items-center')} {...props}>
         <h2 className="mb-4">Players</h2>
