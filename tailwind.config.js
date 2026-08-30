@@ -8,6 +8,8 @@ module.exports = {
     extend: {
       screens: {
         ph: { raw: '(max-width: 768px) and (max-height: 768px)' },
+        mobile: { raw: '(max-width: 639px)' },
+        'phone-landscape': { raw: '(max-width: 1000px) and (max-height: 500px) and (orientation: landscape)' },
       },
       colors: {
         primary: colors.blue,

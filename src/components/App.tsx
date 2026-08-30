@@ -4,7 +4,6 @@ import { plankPanelHorizontal } from '../images'
 import { SignedIn, SignedOut, useSignOut, useUserData } from '@nhost/react'
 import { toast, useOnlyOnce } from '@8thday/react'
 import clsx from 'clsx'
-import { HomeIcon } from '@heroicons/react/24/outline'
 import { Notifications } from './Notifications'
 import { Avatar } from './Avatar'
 import { GameNavigationProvider } from '../hooks/useGameNavigation'
@@ -23,16 +22,7 @@ export const App = (_: AppProps) => {
 
   return (
     <GameNavigationProvider setGameActive={setGameActive}>
-      {gameActive ? (
-        <NavLink
-          to="/"
-          className="flex-center fixed bottom-2 left-2 z-[60] h-12 w-12 rounded-full bg-slate-900/50 text-white transition hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-white/80"
-          aria-label="Home"
-          title="Home"
-        >
-          <HomeIcon className="h-7 w-7" />
-        </NavLink>
-      ) : (
+      {!gameActive && (
         <nav
           className="fixed bottom-0 z-10 flex h-12 w-full items-stretch sm:bottom-[unset] sm:top-0 sm:flex-row-reverse sm:justify-end"
           style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
