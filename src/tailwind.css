@@ -45,7 +45,6 @@ em {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
-    padding-top: 4rem;
   }
 
   .link-on-light {

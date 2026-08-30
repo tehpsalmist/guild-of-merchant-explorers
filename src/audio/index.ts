@@ -1,23 +1,23 @@
 import { AudioTools } from '../game-logic/AudioTools'
 
-const placeBlock1URL = new URL('/src/audio/place-block-1.wav', import.meta.url)
-const placeBlock2URL = new URL('/src/audio/place-block-2.wav', import.meta.url)
-const villageURL = new URL('/src/audio/village.wav', import.meta.url)
+const placeBlock1URL = new URL('./place-block-1.wav', import.meta.url)
+const placeBlock2URL = new URL('./place-block-2.wav', import.meta.url)
+const villageURL = new URL('./village.wav', import.meta.url)
 
-const coin1URL = new URL('/src/audio/coin-1.wav', import.meta.url)
-const coin2URL = new URL('/src/audio/coin-2.wav', import.meta.url)
+const coin1URL = new URL('./coin-1.wav', import.meta.url)
+const coin2URL = new URL('./coin-2.wav', import.meta.url)
 
-const completeObjectiveURL = new URL('/src/audio/complete-objective.wav', import.meta.url)
+const completeObjectiveURL = new URL('./complete-objective.wav', import.meta.url)
 
-const towerURL = new URL('/src/audio/tower.wav', import.meta.url)
-const treasureURL = new URL('/src/audio/treasure.wav', import.meta.url)
-const crystalURL = new URL('/src/audio/crystal.wav', import.meta.url)
-const tradeURL = new URL('/src/audio/trade.wav', import.meta.url)
+const towerURL = new URL('./tower.wav', import.meta.url)
+const treasureURL = new URL('./treasure.wav', import.meta.url)
+const crystalURL = new URL('./crystal.wav', import.meta.url)
+const tradeURL = new URL('./trade.wav', import.meta.url)
 
-const uiCardCloseURL = new URL('/src/audio/ui-card-close.wav', import.meta.url)
-const uiCardOpenURL = new URL('/src/audio/ui-card-open.wav', import.meta.url)
-const uiWoodCloseURL = new URL('/src/audio/ui-wood-close.wav', import.meta.url)
-const uiWoodOpenURL = new URL('/src/audio/ui-wood-open.wav', import.meta.url)
+const uiCardCloseURL = new URL('./ui-card-close.wav', import.meta.url)
+const uiCardOpenURL = new URL('./ui-card-open.wav', import.meta.url)
+const uiWoodCloseURL = new URL('./ui-wood-close.wav', import.meta.url)
+const uiWoodOpenURL = new URL('./ui-wood-open.wav', import.meta.url)
 
 export const uiCardCloseSound = new Audio(uiCardCloseURL.href)
 export const uiCardOpenSound = new Audio(uiCardOpenURL.href)

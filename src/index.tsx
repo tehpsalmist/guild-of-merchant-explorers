@@ -15,10 +15,11 @@ import { LoginForm } from './components/LoginForm'
 import { AuthGuard } from './components/AuthGuard'
 import { ResetPassword } from './components/ResetPassword'
 import { NhostApolloProvider } from '@nhost/react-apollo'
+import './tailwind.css'
 
 export const nhost = new NhostClient({
-  subdomain: process.env.REACT_APP_NHOST_SUBDOMAIN,
-  region: process.env.REACT_APP_NHOST_REGION,
+  subdomain: import.meta.env.VITE_NHOST_SUBDOMAIN ?? import.meta.env.REACT_APP_NHOST_SUBDOMAIN,
+  region: import.meta.env.VITE_NHOST_REGION ?? import.meta.env.REACT_APP_NHOST_REGION,
   clientStorageType: 'cookie',
 })
 

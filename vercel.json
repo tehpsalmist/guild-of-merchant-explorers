@@ -1,7 +1,5 @@
 {
-  "alias": [
-    "guild-of-merchant-explorers"
-  ],
+  "alias": ["guild-of-merchant-explorers"],
   "version": 2,
   "routes": [
     {
@@ -13,5 +11,5 @@
     }
   ],
   "buildCommand": "npm run build",
-  "outputDirectory": "public"
+  "outputDirectory": "dist"
 }
