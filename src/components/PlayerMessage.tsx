@@ -1,4 +1,5 @@
-import React, { ComponentProps } from 'react'
+import clsx from 'clsx'
+import React, { ComponentProps, useEffect, useState } from 'react'
 import { PlayerMode } from '../game-logic/GameState'
 import { useGameState } from '../hooks/useGameState'
 
@@ -15,19 +16,38 @@ const messages: Record<PlayerMode, string> = {
   'treasure-to-draw': 'Draw a treasure card!',
 }
 
-export interface PlayerMessageProps extends ComponentProps<'div'> {}
+export interface PlayerMessageProps extends ComponentProps<'button'> {}
 
 export const PlayerMessage = ({ className = '', ...props }: PlayerMessageProps) => {
   const { gameState } = useGameState()
+  const [expanded, setExpanded] = useState(false)
 
   const mode = gameState.activePlayer.mode
+  const message =
+    mode === 'exploring'
+      ? gameState.currentExplorerCard?.rules(gameState.activePlayer)?.[gameState.activePlayer.cardPhase]?.message ??
+        'Explore!'
+      : messages[mode]
+
+  useEffect(() => setExpanded(false), [message])
 
   return (
-    <div className={`${className}`} {...props}>
-      {mode === 'exploring'
-        ? gameState.currentExplorerCard?.rules(gameState.activePlayer)?.[gameState.activePlayer.cardPhase]?.message ??
-          'Explore!'
-        : messages[mode]}
-    </div>
+    <button
+      {...props}
+      type="button"
+      className={clsx(
+        className,
+        'cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-white/80',
+        expanded ? 'overflow-visible whitespace-normal text-clip' : 'truncate',
+      )}
+      onClick={(event) => {
+        props.onClick?.(event)
+        setExpanded((isExpanded) => !isExpanded)
+      }}
+      aria-expanded={expanded}
+      title={expanded ? undefined : message}
+    >
+      {message}
+    </button>
   )
 }

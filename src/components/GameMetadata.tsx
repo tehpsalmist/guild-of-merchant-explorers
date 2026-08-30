@@ -1,8 +1,11 @@
 import clsx from 'clsx'
 import React, { ComponentType, SVGProps, useEffect, useState } from 'react'
-import { HomeIcon, RectangleStackIcon, TrophyIcon, UserCircleIcon } from '@heroicons/react/24/outline'
+import { HomeIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import { Button } from '@8thday/react'
 import { useNavigate } from 'react-router-dom'
+import type { Objective } from '../game-logic/Objective'
+import type { Player } from '../game-logic/GameState'
+import type { InvestigateCard } from '../game-logic/Cards'
 import { useGameState } from '../hooks/useGameState'
 import {
   blockImage,
@@ -16,10 +19,12 @@ import {
   villageImage,
 } from '../images'
 import { ExplorerBlock } from './ExplorerBlock'
+import { ExplorerMatModal } from './ExplorerMatModal'
+import { InvestigateCardDetail } from './InvestigateCardDetail'
 import { MetadataDialog } from './MetadataDialog'
 import { ObjectiveCardDisplay } from './ObjectiveCardDisplay'
 
-type MetadataCategory = 'home' | 'player' | 'objectives'
+type MetadataCategory = 'active-card' | 'home' | 'player' | 'objectives'
 type MetadataIcon = ComponentType<SVGProps<SVGSVGElement>>
 
 interface MetadataButtonProps {
@@ -37,14 +42,14 @@ const MetadataButton = ({ icon: Icon, label, selected, badge, onClick }: Metadat
     <Element
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={clsx(
-        'group relative flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg backdrop-blur-sm transition-all',
+        'group relative flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg backdrop-blur-sm transition-all',
         selected ? 'scale-105 bg-slate-900/85 ring-2 ring-white/70' : 'bg-slate-900/50',
         onClick ? 'hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-white/80' : 'cursor-default',
       )}
       aria-label={label}
       title={label}
     >
-      <Icon className="h-7 w-7" aria-hidden="true" />
+      <Icon className="h-8 w-8" aria-hidden="true" />
       {badge}
       <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
         {label}
@@ -53,16 +58,156 @@ const MetadataButton = ({ icon: Icon, label, selected, badge, onClick }: Metadat
   )
 }
 
-export const GameMetadata = () => {
+const OBJECTIVE_FAN_POSITIONS = [
+  { right: '2%', top: '0%', rotation: '8deg' },
+  { right: '8%', top: '18%', rotation: '2deg' },
+  { right: '13%', top: '36%', rotation: '-5deg' },
+]
+
+const ObjectiveFanButton = ({
+  objectives,
+  selected,
+  onClick,
+}: {
+  objectives: Objective[]
+  selected: boolean
+  onClick(): void
+}) => (
+  <button
+    type="button"
+    className={clsx(
+      'group relative flex h-14 w-14 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-white/80',
+      selected && 'scale-105',
+    )}
+    aria-label="Objectives"
+    title="Objectives"
+    aria-expanded={selected}
+    onClick={onClick}
+  >
+    <span className="absolute inset-0" aria-hidden="true">
+      {objectives.slice(0, 3).map((objective, position) => (
+        <img
+          key={objective.id}
+          src={objective.imageUrl.href}
+          alt=""
+          className="absolute w-[84%] rounded-[3%] object-contain transition-transform group-hover:scale-105"
+          style={{
+            right: OBJECTIVE_FAN_POSITIONS[position].right,
+            top: OBJECTIVE_FAN_POSITIONS[position].top,
+            zIndex: position + 1,
+            rotate: OBJECTIVE_FAN_POSITIONS[position].rotation,
+            filter: 'drop-shadow(0 4px 3px rgba(0, 0, 0, 0.95))',
+          }}
+          draggable={false}
+        />
+      ))}
+    </span>
+    <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
+      Objectives
+    </span>
+  </button>
+)
+
+const PlayerStuffButton = ({
+  color,
+  investigateCards,
+  selected,
+  onClick,
+}: {
+  color: string
+  investigateCards: Array<{ id: string; imageUrl: URL }>
+  selected: boolean
+  onClick(): void
+}) => {
+  const cards = investigateCards.slice(0, 5)
+  const hasCards = cards.length > 0
+
+  return (
+    <button
+      type="button"
+      className={clsx(
+        'group relative flex h-14 w-14 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-white/80',
+        selected && 'scale-105',
+      )}
+      aria-label="Player's Stuff"
+      title="Player's Stuff"
+      aria-expanded={selected}
+      onClick={onClick}
+    >
+      {hasCards && (
+        <span className="absolute inset-0" aria-hidden="true">
+          {cards.map((card, position) => {
+            const fanPosition = cards.length === 1 ? 0 : (position / (cards.length - 1)) * 2 - 1
+
+            return (
+              <img
+                key={card.id}
+                src={card.imageUrl.href}
+                alt=""
+                className="absolute bottom-[22%] w-[48%] rounded-[6%] object-contain transition-transform group-hover:scale-105"
+                style={{
+                  left: `${50 + fanPosition * 22}%`,
+                  zIndex: position + 1,
+                  rotate: `${fanPosition * 14}deg`,
+                  translate: '-50% 0',
+                  transformOrigin: '50% 90%',
+                  filter: 'drop-shadow(0 3px 2px rgba(0, 0, 0, 0.92))',
+                }}
+                draggable={false}
+              />
+            )
+          })}
+        </span>
+      )}
+
+      <img
+        src={coinImage.href}
+        alt=""
+        className={clsx(
+          'absolute z-20 object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
+          hasCards ? 'bottom-0 left-0 h-6 w-6' : 'left-[27%] top-0 h-8 w-8',
+        )}
+        aria-hidden="true"
+        draggable={false}
+      />
+      <ExplorerBlock
+        color={color}
+        className={clsx(
+          'absolute z-[22] object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
+          hasCards ? 'bottom-0 left-[31%] h-6 w-6' : 'bottom-0 left-0 h-8 w-8',
+        )}
+        aria-hidden="true"
+        draggable={false}
+      />
+      <img
+        src={villageImage.href}
+        alt=""
+        className={clsx(
+          color,
+          'absolute z-[21] object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
+          hasCards ? 'bottom-0 right-0 h-7 w-7' : 'bottom-0 right-0 h-9 w-9',
+        )}
+        aria-hidden="true"
+        draggable={false}
+      />
+
+      <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
+        Player's Stuff
+      </span>
+    </button>
+  )
+}
+
+export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
   const { gameState } = useGameState()
   const [openCategory, setOpenCategory] = useState<MetadataCategory | null>(null)
 
-  const player = gameState.activePlayer
+  const player = viewedPlayer
   const activeInvestigateCard = gameState.currentExplorerCard?.isEraCard
     ? gameState.currentExplorerCard.getInvestigateCard?.(player)
     : null
   const activeCardImage =
-    player.mode === 'free-exploring'
+    gameState.activePlayer.mode === 'free-exploring'
       ? placeBlock
       : activeInvestigateCard?.imageUrl ?? gameState.currentExplorerCard?.imageUrl
 
@@ -99,53 +244,54 @@ export const GameMetadata = () => {
           />
         </div>
         <div className="pointer-events-auto">
-          <MetadataButton
-            icon={RectangleStackIcon}
-            label="Active Card"
-            badge={
-              activeCardImage ? (
-                <img
-                  src={activeCardImage.href}
-                  alt=""
-                  className="absolute -bottom-1 -right-1 h-7 w-5 rotate-6 rounded-sm border border-amber-100/70 object-cover shadow"
-                  aria-hidden="true"
-                />
-              ) : null
-            }
-          />
-        </div>
-        <div className="pointer-events-auto">
-          <MetadataButton
-            icon={UserCircleIcon}
-            label="Player's Stuff"
+          <PlayerStuffButton
+            color={player.color}
+            investigateCards={player.investigateCards.keptCards}
             selected={openCategory === 'player'}
             onClick={() => setOpenCategory('player')}
-            badge={
-              <ExplorerBlock
-                color={player.color}
-                className="absolute -bottom-1 -right-1 h-6 w-6 drop-shadow"
-                aria-hidden="true"
-              />
-            }
           />
         </div>
         <div className="pointer-events-auto">
-          <MetadataButton
-            icon={TrophyIcon}
-            label="Objectives"
+          <ObjectiveFanButton
+            objectives={gameState.objectives}
             selected={openCategory === 'objectives'}
             onClick={() => setOpenCategory('objectives')}
-            badge={
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-xs font-black text-amber-950 shadow">
-                {gameState.objectives.length}
-              </span>
-            }
           />
+        </div>
+        <div className="pointer-events-auto">
+          <button
+            type="button"
+            className="group relative flex h-14 w-14 items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary-300"
+            aria-label="Active Card"
+            title="Active Card"
+            aria-expanded={openCategory === 'active-card'}
+            onClick={() => setOpenCategory('active-card')}
+          >
+            {activeCardImage ? (
+              <img
+                src={activeCardImage.href}
+                alt="Active card"
+                className="h-full w-full object-contain"
+                style={{
+                  filter:
+                    'drop-shadow(0 0 1px #dbeafe) drop-shadow(0 0 4px #3b82f6) drop-shadow(0 6px 5px rgba(0, 0, 0, 0.95))',
+                }}
+              />
+            ) : (
+              <RectangleStackIcon className="h-8 w-8 text-white drop-shadow-lg" aria-hidden="true" />
+            )}
+            <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
+              Active Card
+            </span>
+          </button>
         </div>
       </nav>
 
+      {openCategory === 'active-card' && (
+        <ExplorerMatModal player={player} onClose={() => setOpenCategory(null)} />
+      )}
       {openCategory === 'home' && <HomeDialog onClose={() => setOpenCategory(null)} />}
-      {openCategory === 'player' && <PlayerStuffDialog onClose={() => setOpenCategory(null)} />}
+      {openCategory === 'player' && <PlayerStuffDialog player={player} onClose={() => setOpenCategory(null)} />}
       {openCategory === 'objectives' && <ObjectivesDialog onClose={() => setOpenCategory(null)} />}
     </>
   )
@@ -190,6 +336,15 @@ const HomeDialog = ({ onClose }: { onClose(): void }) => {
             </button>
           </div>
 
+          <a
+            className="mx-auto mt-4 block w-fit rounded-lg px-3 py-2 text-sm font-semibold text-amber-50 underline decoration-amber-200/50 underline-offset-4 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            target="_blank"
+            rel="noopener noreferrer"
+            href="https://www.alderac.com/wp-content/uploads/2022/08/TGOME-Rulebook_web.pdf"
+          >
+            Read Game Instructions
+          </a>
+
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-red-200/20 pt-4 phone-landscape:mt-3 phone-landscape:pt-3">
             <p className="max-w-xs text-sm text-red-100/75">Permanently deletes this game’s saved data.</p>
             <Button variant="destructive" onClick={quitGame}>
@@ -202,9 +357,9 @@ const HomeDialog = ({ onClose }: { onClose(): void }) => {
   )
 }
 
-const PlayerStuffDialog = ({ onClose }: { onClose(): void }) => {
+const PlayerStuffDialog = ({ player, onClose }: { player: Player; onClose(): void }) => {
   const { gameState } = useGameState()
-  const player = gameState.activePlayer
+  const [detailCard, setDetailCard] = useState<InvestigateCard | null>(null)
   const hexes = player.board.getFlatHexes()
   const investigateCards = player.investigateCards.keptCards
   const activeInvestigateCard = gameState.currentExplorerCard?.isEraCard
@@ -243,32 +398,30 @@ const PlayerStuffDialog = ({ onClose }: { onClose(): void }) => {
   return (
     <MetadataDialog title={`${player.id}'s Stuff`} eyebrow="Explorer Ledger" onClose={onClose}>
       <div className="h-full overflow-y-auto p-3 sm:p-5 phone-landscape:p-2">
-        <section className="rounded-2xl border border-amber-100/20 bg-black/20 p-3 phone-landscape:p-2">
-          <div className="mb-3 flex items-center justify-between gap-3 phone-landscape:mb-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <ExplorerBlock color={player.color} className="h-9 w-9 shrink-0 object-contain" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-100/60">Most Important</p>
-                <h2 className="truncate font-serif text-xl text-amber-50 sm:text-2xl">Investigate Cards</h2>
-              </div>
-            </div>
-            <span className="rounded-full bg-amber-100/10 px-3 py-1 text-xs font-bold text-amber-100/75">
-              {investigateCards.length} acquired
-            </span>
-          </div>
+        <section>
+          <h2 className="mb-2 text-center font-serif text-xl text-amber-50 sm:text-2xl phone-landscape:mb-1 phone-landscape:text-lg">
+            Investigate Cards
+          </h2>
 
           {investigateCards.length ? (
-            <div className="no-scrollbar flex snap-x snap-mandatory justify-start gap-3 overflow-x-auto px-1 pb-1 sm:justify-center">
+            <div className="flex min-h-0 w-full items-center justify-center gap-2 sm:gap-3 phone-landscape:gap-2">
               {investigateCards.map((card) => (
-                <img
+                <button
                   key={card.id}
-                  src={card.imageUrl.href}
-                  alt="Investigate card"
-                  className={clsx(
-                    'h-[clamp(10rem,34dvh,19rem)] w-auto max-w-none snap-center rounded-xl shadow-xl',
-                    card === activeInvestigateCard && 'ring-4 ring-amber-300 ring-offset-2 ring-offset-slate-900',
-                  )}
-                />
+                  type="button"
+                  className="group flex min-w-0 flex-1 justify-center rounded-[5%] focus:outline-none"
+                  onClick={() => setDetailCard(card)}
+                  aria-label="Enlarge investigate card"
+                >
+                  <img
+                    src={card.imageUrl.href}
+                    alt="Investigate card"
+                    className={clsx(
+                      'h-auto max-h-[clamp(8rem,34dvh,19rem)] w-full max-w-[18rem] rounded-[5%] object-contain shadow-xl transition group-hover:scale-[1.02] group-focus:scale-[1.02] group-focus:ring-4 group-focus:ring-primary-400 phone-landscape:max-h-[30dvh]',
+                      card === activeInvestigateCard && 'ring-4 ring-amber-300 ring-offset-2 ring-offset-slate-900',
+                    )}
+                  />
+                </button>
               ))}
             </div>
           ) : (
@@ -327,21 +480,15 @@ const PlayerStuffDialog = ({ onClose }: { onClose(): void }) => {
           )}
         </section>
 
-        <footer className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/15 bg-black/20 p-3">
-          <a
-            className="rounded-lg px-3 py-2 font-semibold text-amber-50 underline decoration-amber-200/50 underline-offset-4 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-200"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://www.alderac.com/wp-content/uploads/2022/08/TGOME-Rulebook_web.pdf"
-          >
-            Read Game Instructions
-          </a>
-          {player.moveHistory.size > 1 && (
+        {player === gameState.activePlayer && player.moveHistory.size > 1 && (
+          <footer className="mt-3 flex items-center justify-center rounded-2xl border border-white/15 bg-black/20 p-3">
             <Button variant="dismissive" onClick={() => player.selectUndo(true)}>
               Reset This Turn
             </Button>
-          )}
-        </footer>
+          </footer>
+        )}
+
+        {detailCard && <InvestigateCardDetail card={detailCard} onClose={() => setDetailCard(null)} />}
       </div>
     </MetadataDialog>
   )

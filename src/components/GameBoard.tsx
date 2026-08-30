@@ -1,29 +1,94 @@
+import clsx from 'clsx'
 import React, { ComponentProps, useEffect, useState } from 'react'
 import { useGameState } from '../hooks/useGameState'
 import { ExplorerMap } from './ExplorerMap'
-import { Button, Modal, toast, useEventListener } from '@8thday/react'
+import { toast, useEventListener } from '@8thday/react'
 import UTurnIcon from '@heroicons/react/24/solid/ArrowUturnLeftIcon'
-import { coinImage, plankPanelHorizontal, treasureChestImage } from '../images'
 import { EraLabel } from './EraLabel'
-import { ExplorerCardMat } from './ExplorerCardMat'
-import { PlayerMessage } from './PlayerMessage'
 import { ScoreBoardModal } from './ScoreBoardModal'
 import { GameMetadata } from './GameMetadata'
+import type { InvestigateCard, TreasureCard } from '../game-logic/Cards'
+import type { Player } from '../game-logic/GameState'
+import { MetadataDialog } from './MetadataDialog'
+import { TreasureCardDialog } from './TreasureCardDialog'
 
 export interface GameBoardProps extends ComponentProps<'main'> {}
 
+interface GameActionButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
+  label: string
+  icon?: React.ReactNode
+  highlighted?: boolean
+}
+
+const GameActionButton = ({ label, icon, highlighted = false, className, ...props }: GameActionButtonProps) => (
+  <button
+    {...props}
+    type="button"
+    className={clsx(
+      'group flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-1 text-white shadow-lg backdrop-blur-sm transition-all focus:outline-none focus:ring-2 focus:ring-white/80',
+      highlighted
+        ? 'bg-primary-600/90 ring-2 ring-primary-200 hover:bg-primary-500'
+        : 'bg-slate-900/55 hover:bg-slate-900/75',
+      className,
+    )}
+    aria-label={props['aria-label'] ?? label}
+    title={props.title ?? label}
+  >
+    {icon ?? (
+      <span
+        className="flex flex-col items-center justify-center text-[0.58rem] font-black uppercase leading-[0.68rem] tracking-tight"
+        aria-hidden="true"
+      >
+        {label.split(' ').map((word, position) => (
+          <span key={`${word}-${position}`}>{word}</span>
+        ))}
+      </span>
+    )}
+  </button>
+)
+
+const InvestigateActionIcon = ({ cards }: { cards: Array<{ id: string; imageUrl: URL }> }) => (
+  <span className="relative block h-9 w-9" aria-hidden="true">
+    {cards.slice(0, 3).map((card, position, visibleCards) => {
+      const fanPosition = visibleCards.length === 1 ? 0 : (position / (visibleCards.length - 1)) * 2 - 1
+
+      return (
+        <img
+          key={card.id}
+          src={card.imageUrl.href}
+          alt=""
+          className="absolute bottom-0 h-8 w-auto rounded-[6%] object-contain drop-shadow"
+          style={{
+            left: `${50 + fanPosition * 18}%`,
+            zIndex: position + 1,
+            rotate: `${fanPosition * 12}deg`,
+            translate: '-50% 0',
+            transformOrigin: '50% 90%',
+          }}
+          draggable={false}
+        />
+      )
+    })}
+  </span>
+)
+
 export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const [investigateModalOpen, setInvestigateModalOpen] = useState(false)
-  const [newTreasureCard, setNewTreasureCard] = useState(false)
+  const [newTreasureCard, setNewTreasureCard] = useState<{
+    card: TreasureCard
+    playerName: string
+  } | null>(null)
   const [userPromptOpen, setUserPromptOpen] = useState(false)
+  const [scoreBoardOpen, setScoreBoardOpen] = useState(false)
   const [viewedPlayerId, setViewedPlayerId] = useState<string>()
   const updateState = useState(0)[1]
 
   const { gameState, resetGame } = useGameState()
   const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.activePlayer
-
-  const activeTreasureCards = gameState.activePlayer.treasureCards.keptCards.filter((c) => c.type !== 'jarMultiplier')
-  const activeTreasureJars = gameState.activePlayer.treasureCards.keptCards.filter((c) => c.type === 'jarMultiplier')
+  const isInvestigateChoice = ['choosing-investigate-card', 'choosing-investigate-card-reuse'].includes(
+    gameState.activePlayer.mode,
+  )
+  const isPlayerChoice = ['user-prompting', 'treasure-to-draw'].includes(gameState.activePlayer.mode)
 
   useEventListener('keydown', (e) => {
     if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
@@ -58,126 +123,111 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   }
 
   useEffect(() => {
-    const treasureListener = () => setNewTreasureCard(true)
-    gameState.activePlayer.addEventListener('treasure-gained', treasureListener)
+    const activePlayer = gameState.activePlayer
+    const treasureListener = () => {
+      const drawnTreasure = activePlayer.treasureCards.cards[activePlayer.treasureCards.size - 1]
 
-    return () => gameState.activePlayer.removeEventListener('treasure-gained', treasureListener)
+      if (drawnTreasure) {
+        setNewTreasureCard({
+          card: drawnTreasure.card,
+          playerName: activePlayer.id,
+        })
+      }
+    }
+    activePlayer.addEventListener('treasure-gained', treasureListener)
+
+    return () => activePlayer.removeEventListener('treasure-gained', treasureListener)
   }, [gameState.activePlayer])
 
   useEffect(() => {
-    if (gameState.gameOver) {
-      setUserPromptOpen(true)
+    if (newTreasureCard) {
+      setUserPromptOpen(false)
+      setInvestigateModalOpen(false)
+      return
     }
 
-    switch (gameState.activePlayer.mode) {
-      case 'choosing-investigate-card':
-      case 'choosing-investigate-card-reuse':
-        return setInvestigateModalOpen(true)
-      case 'user-prompting':
-      case 'treasure-to-draw':
-        return setUserPromptOpen(true)
+    if (gameState.gameOver) {
+      setScoreBoardOpen(true)
+      return
     }
-  }, [gameState.activePlayer.mode, gameState.gameOver])
+
+    if (isInvestigateChoice) {
+      setUserPromptOpen(false)
+      setInvestigateModalOpen(true)
+      return
+    }
+
+    if (isPlayerChoice) {
+      setInvestigateModalOpen(false)
+      setUserPromptOpen(true)
+    }
+  }, [gameState.gameOver, isInvestigateChoice, isPlayerChoice, newTreasureCard])
 
   const isEndOfPhase =
     gameState.activePlayer.moveHistory.getPlacedHexes()[gameState.activePlayer.cardPhase]?.size ===
     gameState.activePlayer.currentCardRules?.[gameState.activePlayer.cardPhase]?.limit
   const noLegalMoves = isEndOfPhase || gameState.activePlayer.board.getFlatHexes().every((h) => !h.isExplorable())
+  const investigateActionCards =
+    (gameState.era < 3
+      ? gameState.activePlayer.investigateCardCandidates
+      : gameState.activePlayer.investigateCards.keptCards) ?? []
 
   return (
     <>
-      <div
-        className="fixed top-0 z-40 h-16 w-full px-4"
-        style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
-      >
-        <div className="grid h-full grid-cols-[1fr,auto,1fr] grid-rows-1">
-          <div className="flex h-16 items-center py-0.5">
-            <EraLabel className="mr-4" />
-            {(gameState.activePlayer.mode === 'choosing-investigate-card' ||
-              gameState.activePlayer.mode === 'choosing-investigate-card-reuse') && (
-              <button
-                className="flex-center mr-4 h-full gap-4 rounded border-2 border-primary-400"
-                onClick={() => setInvestigateModalOpen(true)}
-              >
-                {(gameState.era < 3
-                  ? gameState.activePlayer.investigateCardCandidates
-                  : gameState.activePlayer.investigateCards.keptCards
-                )?.map((candidate) => (
-                  <img
-                    key={candidate.id}
-                    className="-z-10 max-h-full max-w-12"
-                    src={candidate.imageUrl.href}
-                    alt="Investigate Card"
-                  />
-                ))}
-              </button>
-            )}
-            {gameState.activePlayer.mode === 'exploring' &&
-              gameState.activePlayer.currentCardRules &&
-              (!gameState.currentExplorerCard ||
-                (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 === gameState.activePlayer.cardPhase) && (
-                <Button
-                  className="mr-4 whitespace-nowrap"
-                  variant={noLegalMoves ? 'primary' : 'dismissive'}
-                  onClick={() => {
-                    if (
-                      noLegalMoves ||
-                      confirm('There are legal moves left on the board, are you sure you want to end your turn?')
-                    ) {
-                      gameState.activePlayer.selectMove({ action: 'confirm-turn' })
-                    }
-                  }}
-                >
-                  {gameState.soloMode ? 'Next Card' : 'End Turn'}
-                </Button>
-              )}
-            {gameState.activePlayer.mode === 'exploring' &&
-              gameState.activePlayer.currentCardRules &&
-              (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 !== gameState.activePlayer.cardPhase && (
-                <Button
-                  className="mr-4 whitespace-nowrap"
-                  variant={isEndOfPhase ? 'primary' : 'dismissive'}
-                  onClick={() => gameState.activePlayer.selectMove({ action: 'advance-card-phase' })}
-                >
-                  Next Phase
-                </Button>
-              )}
-            {gameState.gameOver && (
-              <Button className="mr-4 whitespace-nowrap" variant="primary" onClick={() => setUserPromptOpen(true)}>
-                Score Board
-              </Button>
-            )}
-            {!userPromptOpen && ['user-prompting', 'treasure-to-draw'].includes(gameState.activePlayer.mode) && (
-              <Button className="mr-2" variant="primary" onClick={() => setUserPromptOpen(true)}>
-                View Choices
-              </Button>
-            )}
-            {gameState.activePlayer.moveHistory.size > 0 && (
-              <Button
-                className="mr-4"
-                variant="dismissive"
-                PreIcon={UTurnIcon}
-                onClick={() => gameState.activePlayer.selectUndo()}
-              >
-                Undo
-              </Button>
-            )}
-          </div>
-          <ExplorerCardMat />
-          <div className="flex justify-end gap-2">
-            <img className="max-h-16 max-w-32" src={coinImage.href} alt="coin" />
-            <span className="text-6xl font-bold leading-[1em] text-primary-500 shadow-white text-shadow">
-              {gameState.activePlayer.coins}
-            </span>
-            <img className="max-h-16 max-w-32" src={treasureChestImage.href} alt="treasure" />
-            <span className="text-6xl font-bold leading-[1em] text-primary-500 shadow-white text-shadow">
-              {activeTreasureCards.length + activeTreasureJars.length}
-            </span>
-          </div>
-        </div>
+      <GameMetadata viewedPlayer={viewedPlayer} />
+      <div className="fixed bottom-2 left-2 landscape:left-[4.5rem] z-[65] flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 landscape:max-w-[calc(100dvw-10rem)]">
+        {isInvestigateChoice && (
+          <GameActionButton
+            label="Choose Investigate Card"
+            highlighted
+            icon={<InvestigateActionIcon cards={investigateActionCards} />}
+            onClick={() => setInvestigateModalOpen(true)}
+          />
+        )}
+        {gameState.activePlayer.mode === 'exploring' &&
+          gameState.activePlayer.currentCardRules &&
+          (!gameState.currentExplorerCard ||
+            (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 === gameState.activePlayer.cardPhase) && (
+            <GameActionButton
+              label={gameState.soloMode ? 'Next Card' : 'End Turn'}
+              highlighted={noLegalMoves}
+              onClick={() => {
+                if (
+                  noLegalMoves ||
+                  confirm('There are legal moves left on the board, are you sure you want to end your turn?')
+                ) {
+                  gameState.activePlayer.selectMove({ action: 'confirm-turn' })
+                }
+              }}
+            />
+          )}
+        {gameState.activePlayer.mode === 'exploring' &&
+          gameState.activePlayer.currentCardRules &&
+          (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 !== gameState.activePlayer.cardPhase && (
+            <GameActionButton
+              label="Next Phase"
+              highlighted={isEndOfPhase}
+              onClick={() => gameState.activePlayer.selectMove({ action: 'advance-card-phase' })}
+            />
+          )}
+        {gameState.gameOver && (
+          <GameActionButton label="Score Board" highlighted onClick={() => setScoreBoardOpen(true)} />
+        )}
+        {!userPromptOpen && isPlayerChoice && !newTreasureCard && (
+          <GameActionButton label="View Choices" highlighted onClick={() => setUserPromptOpen(true)} />
+        )}
+        {gameState.activePlayer.moveHistory.size > 0 && (
+          <GameActionButton
+            label="Undo"
+            icon={<UTurnIcon className="h-7 w-7" aria-hidden="true" />}
+            onClick={() => gameState.activePlayer.selectUndo()}
+          />
+        )}
       </div>
-      <GameMetadata />
-      <PlayerMessage className="fixed bottom-2 right-2 z-50 w-max max-w-[95vw] rounded bg-slate-900/50 p-2 text-lg font-bold text-white ph:text-sm" />
+      <EraLabel
+        className="pointer-events-none fixed bottom-2 right-2 z-50 flex opacity-80"
+        aria-label={`Era ${gameState.era + 1}`}
+      />
       <main className={`${className} game-board-grid relative w-full`} {...props}>
         <ExplorerMap
           key={viewedPlayer.id}
@@ -186,124 +236,204 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
           onViewNextPlayer={gameState.players.length > 1 ? viewNextPlayer : undefined}
         />
       </main>
-      {['user-prompting', 'treasure-to-draw'].includes(gameState.activePlayer.mode) && userPromptOpen && (
-        <Modal onClose={() => setUserPromptOpen(false)}>
-          <div
-            className="flex-center flex-col gap-4 p-2 text-white"
-            style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
-          >
-            <p>
-              <strong>{gameState.activePlayer.id}</strong>: How would you like to proceed?
-            </p>
-            {gameState.activePlayer.treasureCardsToDraw > 0 && (
-              <div className="flex-center flex-col">
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    const [treasureCard] = gameState.treasureDeck.drawCards()
+      {isPlayerChoice && userPromptOpen && !newTreasureCard && (
+        <PlayerChoicesDialog
+          player={gameState.activePlayer}
+          onClose={() => setUserPromptOpen(false)}
+          onDrawTreasure={() => {
+            const [treasureCard] = gameState.treasureDeck.drawCards()
 
-                    if (treasureCard.discard) {
-                      gameState.treasureDeck.discard(treasureCard)
-                    }
+            if (!treasureCard) return
 
-                    gameState.activePlayer.selectMove({
-                      action: 'draw-treasure',
-                      treasureCard,
-                    })
-                  }}
-                >
-                  Draw Treasure
-                </Button>
-                <p>Drawing a treasure card cannot be undone!</p>
-              </div>
-            )}
-            {gameState.activePlayer.connectedTradePosts.length > 1 && (
-              <Button
-                variant="primary"
-                onClick={() =>
-                  gameState.activePlayer.setMode(
-                    gameState.activePlayer.connectedTradePosts.length === 2 ? 'trading' : 'choosing-trade-route',
-                  )
-                }
-              >
-                Trade
-              </Button>
-            )}
-            {gameState.activePlayer.regionForVillage && (
-              <Button variant="primary" onClick={() => gameState.activePlayer.setMode('choosing-village')}>
-                Place Village
-              </Button>
-            )}
-            {gameState.activePlayer.moveHistory.currentMoves.length > 0 && (
-              <Button
-                variant={gameState.activePlayer.treasureCardsToDraw ? 'destructive' : 'dismissive'}
-                onClick={() => gameState.activePlayer.selectUndo()}
-              >
-                Undo
-              </Button>
-            )}
-          </div>
-        </Modal>
+            setUserPromptOpen(false)
+            if (treasureCard.discard) gameState.treasureDeck.discard(treasureCard)
+
+            gameState.activePlayer.selectMove({ action: 'draw-treasure', treasureCard })
+          }}
+          onTrade={() => {
+            setUserPromptOpen(false)
+            gameState.activePlayer.setMode(
+              gameState.activePlayer.connectedTradePosts.length === 2 ? 'trading' : 'choosing-trade-route',
+            )
+          }}
+          onPlaceVillage={() => {
+            setUserPromptOpen(false)
+            gameState.activePlayer.setMode('choosing-village')
+          }}
+          onUndo={() => {
+            setUserPromptOpen(false)
+            gameState.activePlayer.selectUndo()
+          }}
+        />
       )}
-      {['choosing-investigate-card', 'choosing-investigate-card-reuse', ''].includes(gameState.activePlayer.mode) &&
-        investigateModalOpen && (
-          <Modal onClose={() => setInvestigateModalOpen(false)}>
-            <p className="mb-4 text-center">
-              <strong>{gameState.activePlayer.id}</strong>: Choose an Investigate Card for Era{' '}
-              {gameState.era > 2 ? 'IV' : 'I'.repeat(gameState.era + 1)}.
-            </p>
-            <div className="flex-center gap-4">
-              {(gameState.era < 3
-                ? gameState.activePlayer.investigateCardCandidates
-                : gameState.activePlayer.investigateCards.keptCards
-              )?.map((candidate, index, cards) => (
-                <button
-                  key={candidate.id}
-                  onClick={() => {
-                    if (gameState.era < 3) {
-                      const discardedCard = cards.find((c) => c !== candidate)
-                      if (!discardedCard) {
-                        return toast.error({
-                          message: 'Error choosing Investigate Card',
-                          description: 'Please refresh the browser and try again.',
-                        })
-                      }
-                      gameState.activePlayer.selectMove({
-                        action: 'choose-investigate-card',
-                        chosenCard: candidate,
-                        discardedCard,
-                      })
-                    } else {
-                      gameState.activePlayer.selectMove({ action: 'choose-investigate-card-reuse', era: index })
-                    }
-                  }}
-                >
-                  <img src={candidate.imageUrl.href} alt="Investigate Card" />
-                </button>
-              ))}
-            </div>
-          </Modal>
-        )}
-      {newTreasureCard && (
-        <Modal onClose={() => setNewTreasureCard(false)}>
-          <p className="mb-4 text-center">
-            Congratulations, <strong>{gameState.activePlayer.id}</strong>, you drew a treasure card:
-          </p>
-          <img
-            className="block max-w-md rounded-2xl"
-            src={
-              gameState.activePlayer.treasureCards.cards[gameState.activePlayer.treasureCards.size - 1]?.card.imageUrl
-                .href
+      {(isInvestigateChoice || gameState.activePlayer.mode === '') && investigateModalOpen && !newTreasureCard && (
+        <InvestigateChoiceDialog
+          era={gameState.era}
+          playerName={gameState.activePlayer.id}
+          cards={
+            (gameState.era < 3
+              ? gameState.activePlayer.investigateCardCandidates
+              : gameState.activePlayer.investigateCards.keptCards) ?? []
+          }
+          onClose={() => setInvestigateModalOpen(false)}
+          onSelect={(candidate, index, cards) => {
+            if (gameState.era < 3) {
+              const discardedCard = cards.find((card) => card !== candidate)
+              if (!discardedCard) {
+                return toast.error({
+                  message: 'Error choosing Investigate Card',
+                  description: 'Please refresh the browser and try again.',
+                })
+              }
+              setInvestigateModalOpen(false)
+              gameState.activePlayer.selectMove({
+                action: 'choose-investigate-card',
+                chosenCard: candidate,
+                discardedCard,
+              })
+            } else {
+              setInvestigateModalOpen(false)
+              gameState.activePlayer.selectMove({ action: 'choose-investigate-card-reuse', era: index })
             }
-          />
-          <Button variant="primary" onClick={() => setNewTreasureCard(false)}>
-            OK
-          </Button>
-        </Modal>
+          }}
+        />
       )}
-      {gameState.gameOver && userPromptOpen && (
-        <ScoreBoardModal onClose={() => setUserPromptOpen(false)} onNewGame={resetGame} />
+      {newTreasureCard && (
+        <TreasureCardDialog
+          card={newTreasureCard.card}
+          playerName={newTreasureCard.playerName}
+          onClose={() => setNewTreasureCard(null)}
+        />
+      )}
+      {gameState.gameOver && scoreBoardOpen && !newTreasureCard && (
+        <ScoreBoardModal onClose={() => setScoreBoardOpen(false)} onNewGame={resetGame} />
       )}
     </>
   )
 }
+
+interface PlayerChoicesDialogProps {
+  player: Player
+  onClose(): void
+  onDrawTreasure(): void
+  onTrade(): void
+  onPlaceVillage(): void
+  onUndo(): void
+}
+
+const PlayerChoicesDialog = ({
+  player,
+  onClose,
+  onDrawTreasure,
+  onTrade,
+  onPlaceVillage,
+  onUndo,
+}: PlayerChoicesDialogProps) => (
+  <MetadataDialog title="Choose Your Next Move" eyebrow={`${player.id}'s Turn`} onClose={onClose}>
+    <div className="flex h-full items-center justify-center overflow-y-auto p-4 sm:p-6 phone-landscape:p-3">
+      <div className="w-full max-w-xl rounded-2xl border border-amber-100/20 bg-black/25 p-3 shadow-xl sm:p-4 phone-landscape:p-2">
+        <div className="grid gap-2.5 sm:grid-cols-2 phone-landscape:grid-cols-2 phone-landscape:gap-2">
+          {player.treasureCardsToDraw > 0 && (
+            <PlayerChoiceButton
+              title="Draw Treasure"
+              detail="Drawing a treasure card cannot be undone."
+              onClick={onDrawTreasure}
+              highlighted
+            />
+          )}
+          {player.connectedTradePosts.length > 1 && <PlayerChoiceButton title="Trade" onClick={onTrade} />}
+          {player.regionForVillage && <PlayerChoiceButton title="Place Village" onClick={onPlaceVillage} />}
+          {player.moveHistory.currentMoves.length > 0 && (
+            <PlayerChoiceButton
+              title="Undo"
+              detail="Reverse your last decision."
+              onClick={onUndo}
+              destructive={player.treasureCardsToDraw > 0}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  </MetadataDialog>
+)
+
+const PlayerChoiceButton = ({
+  title,
+  detail,
+  highlighted = false,
+  destructive = false,
+  onClick,
+}: {
+  title: string
+  detail?: string
+  highlighted?: boolean
+  destructive?: boolean
+  onClick(): void
+}) => (
+  <button
+    type="button"
+    className={clsx(
+      'min-h-20 rounded-xl border p-4 text-left shadow transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 phone-landscape:min-h-14 phone-landscape:p-3',
+      highlighted
+        ? 'border-primary-200/60 bg-primary-600/90 text-white hover:bg-primary-500 focus:ring-primary-100'
+        : destructive
+          ? 'border-red-200/30 bg-red-950/65 text-red-50 hover:bg-red-900/75 focus:ring-red-200'
+          : 'border-amber-100/25 bg-[#f5edcf]/95 text-slate-900 hover:bg-amber-50 focus:ring-amber-200',
+    )}
+    onClick={onClick}
+  >
+    <span className="block text-lg font-black phone-landscape:text-base">{title}</span>
+    {detail && (
+      <span
+        className={clsx(
+          'mt-0.5 block text-sm phone-landscape:text-xs',
+          highlighted ? 'text-primary-50/90' : destructive ? 'text-red-100/75' : 'text-slate-600',
+        )}
+      >
+        {detail}
+      </span>
+    )}
+  </button>
+)
+
+interface InvestigateChoiceDialogProps {
+  era: number
+  playerName: string
+  cards: InvestigateCard[]
+  onClose(): void
+  onSelect(card: InvestigateCard, index: number, cards: InvestigateCard[]): void
+}
+
+const InvestigateChoiceDialog = ({ era, playerName, cards, onClose, onSelect }: InvestigateChoiceDialogProps) => (
+  <MetadataDialog
+    title="Choose an Investigate Card"
+    eyebrow={`${playerName} · Era ${era > 2 ? 'IV' : 'I'.repeat(era + 1)}`}
+    onClose={onClose}
+  >
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 p-3 sm:gap-4 sm:p-5 phone-landscape:gap-1.5 phone-landscape:p-2">
+      <p className="text-center text-sm text-amber-50/75 phone-landscape:text-xs">Select a card to continue.</p>
+      <div
+        className={clsx(
+          'grid min-h-0 grid-cols-2 place-items-center gap-3 phone-landscape:gap-2',
+          cards.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+        )}
+      >
+        {cards.map((card, index) => (
+          <button
+            key={card.id}
+            type="button"
+            className="group flex h-full min-h-0 w-full items-center justify-center rounded-[5%] focus:outline-none focus:ring-4 focus:ring-primary-300"
+            onClick={() => onSelect(card, index, cards)}
+            aria-label={`Choose investigate card ${index + 1}`}
+          >
+            <img
+              src={card.imageUrl.href}
+              alt="Investigate card"
+              className="h-auto max-h-full w-auto max-w-full rounded-[5%] object-contain shadow-2xl transition group-hover:scale-[1.02] group-focus:scale-[1.02]"
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  </MetadataDialog>
+)

@@ -1,12 +1,13 @@
 import React, { ComponentProps, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
 import { HexPath } from './HexPath'
-import { useGameState } from '../hooks/useGameState'
 import { useResizeObserver } from '@8thday/react'
 import { EraCards } from './EraCards'
-import { plankPanelHorizontal } from '../images'
-import { Player } from '../game-logic/GameState'
+import { coinImage, plankPanelHorizontal } from '../images'
+import type { Player } from '../game-logic/GameState'
 import clsx from 'clsx'
 import { ExplorerBlock } from './ExplorerBlock'
+import { ObjectiveCards } from './ObjectiveCards'
+import { PlayerMessage } from './PlayerMessage'
 
 const MAGIC_OFFSET_VALUE_X = 25
 const MAGIC_OFFSET_VALUE_Y = 43.3
@@ -16,6 +17,8 @@ const HEX_HEIGHT = 86.6
 const MIN_BOARD_WIDTH = 800
 const MAX_ZOOM = 2.5
 const WHEEL_ZOOM_SENSITIVITY = 0.0015
+const EXPLORER_CARD_MARGIN_RATIO = 0.22
+const OBJECTIVE_CARD_MARGIN_RATIO = 0.26
 
 interface PanMetrics {
   baseBoardWidth: number
@@ -24,6 +27,8 @@ interface PanMetrics {
   boardHeight: number
   paddingX: number
   paddingY: number
+  marginLeft: number
+  marginTop: number
   viewportWidth: number
   viewportHeight: number
   minZoom: number
@@ -65,6 +70,7 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   const [isDragging, setIsDragging] = useState(false)
 
   const boardRef = useRef<HTMLDivElement>(null)
+  const worldRef = useRef<HTMLDivElement>(null)
   const panSurfaceRef = useRef<HTMLDivElement>(null)
   const panMetricsRef = useRef<PanMetrics | null>(null)
   const pointerDragRef = useRef<PointerDrag | null>(null)
@@ -72,7 +78,7 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   const pinchGestureRef = useRef<PinchGesture | null>(null)
   const suppressClickRef = useRef(false)
   const containerRef = useResizeObserver<HTMLDivElement>(() => {
-    if (!boardRef.current || !panSurfaceRef.current || !containerRef.current) return
+    if (!boardRef.current || !worldRef.current || !panSurfaceRef.current || !containerRef.current) return
 
     const boardRatio = player.board.width / player.board.height
     const { width, height } = containerRef.current.getBoundingClientRect()
@@ -89,11 +95,17 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
     }
 
     const focusX = previousMetrics
-      ? (containerRef.current.scrollLeft + previousMetrics.viewportWidth / 2 - previousMetrics.paddingX) /
+      ? (containerRef.current.scrollLeft +
+          previousMetrics.viewportWidth / 2 -
+          previousMetrics.paddingX -
+          previousMetrics.marginLeft) /
         previousMetrics.boardWidth
       : 0.5
     const focusY = previousMetrics
-      ? (containerRef.current.scrollTop + previousMetrics.viewportHeight / 2 - previousMetrics.paddingY) /
+      ? (containerRef.current.scrollTop +
+          previousMetrics.viewportHeight / 2 -
+          previousMetrics.paddingY -
+          previousMetrics.marginTop) /
         previousMetrics.boardHeight
       : 0.5
 
@@ -105,12 +117,16 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
     const zoom = clamp(previousMetrics?.zoom ?? 1, minZoom, MAX_ZOOM)
     const boardWidth = baseBoardWidth * zoom
     const boardHeight = baseBoardHeight * zoom
+    const marginLeft = boardWidth * EXPLORER_CARD_MARGIN_RATIO
+    const marginTop = boardWidth * OBJECTIVE_CARD_MARGIN_RATIO
     // A half-viewport buffer lets either edge of the board be panned all the way to the viewport center.
     const paddingX = width / 2
     const paddingY = height / 2
 
     boardRef.current.style.width = `${boardWidth}px`
     boardRef.current.style.height = `${boardHeight}px`
+    worldRef.current.style.gridTemplateColumns = `${marginLeft}px ${boardWidth}px`
+    worldRef.current.style.gridTemplateRows = `${marginTop}px ${boardHeight}px`
     panSurfaceRef.current.style.padding = `${paddingY}px ${paddingX}px`
 
     panMetricsRef.current = {
@@ -120,14 +136,16 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
       boardHeight,
       paddingX,
       paddingY,
+      marginLeft,
+      marginTop,
       viewportWidth: width,
       viewportHeight: height,
       minZoom,
       zoom,
     }
 
-    containerRef.current.scrollLeft = paddingX + focusX * boardWidth - width / 2
-    containerRef.current.scrollTop = paddingY + focusY * boardHeight - height / 2
+    containerRef.current.scrollLeft = paddingX + marginLeft + focusX * boardWidth - width / 2
+    containerRef.current.scrollTop = paddingY + marginTop + focusY * boardHeight - height / 2
   })
 
   const zoomBoardAt = (
@@ -139,27 +157,42 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
   ) => {
     const container = containerRef.current
     const board = boardRef.current
+    const world = worldRef.current
     const metrics = panMetricsRef.current
 
-    if (!container || !board || !metrics) return
+    if (!container || !board || !world || !metrics) return
 
     const zoom = clamp(requestedZoom, metrics.minZoom, MAX_ZOOM)
     if (Math.abs(zoom - metrics.zoom) < 0.0001) return
 
-    const anchorX = boardX ?? clamp((container.scrollLeft + viewportX - metrics.paddingX) / metrics.boardWidth, 0, 1)
-    const anchorY = boardY ?? clamp((container.scrollTop + viewportY - metrics.paddingY) / metrics.boardHeight, 0, 1)
+    const anchorX =
+      boardX ??
+      clamp(
+        (container.scrollLeft + viewportX - metrics.paddingX - metrics.marginLeft) / metrics.boardWidth,
+        0,
+        1,
+      )
+    const anchorY =
+      boardY ??
+      clamp((container.scrollTop + viewportY - metrics.paddingY - metrics.marginTop) / metrics.boardHeight, 0, 1)
     const boardWidth = metrics.baseBoardWidth * zoom
     const boardHeight = metrics.baseBoardHeight * zoom
+    const marginLeft = boardWidth * EXPLORER_CARD_MARGIN_RATIO
+    const marginTop = boardWidth * OBJECTIVE_CARD_MARGIN_RATIO
 
     board.style.width = `${boardWidth}px`
     board.style.height = `${boardHeight}px`
+    world.style.gridTemplateColumns = `${marginLeft}px ${boardWidth}px`
+    world.style.gridTemplateRows = `${marginTop}px ${boardHeight}px`
 
     metrics.boardWidth = boardWidth
     metrics.boardHeight = boardHeight
+    metrics.marginLeft = marginLeft
+    metrics.marginTop = marginTop
     metrics.zoom = zoom
 
-    container.scrollLeft = metrics.paddingX + anchorX * boardWidth - viewportX
-    container.scrollTop = metrics.paddingY + anchorY * boardHeight - viewportY
+    container.scrollLeft = metrics.paddingX + marginLeft + anchorX * boardWidth - viewportX
+    container.scrollTop = metrics.paddingY + marginTop + anchorY * boardHeight - viewportY
   }
 
   useEffect(() => {
@@ -215,8 +248,16 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
         pointerIds: [firstId, secondId],
         startDistance: Math.hypot(second.x - first.x, second.y - first.y),
         startZoom: metrics.zoom,
-        boardX: clamp((event.currentTarget.scrollLeft + midpointX - metrics.paddingX) / metrics.boardWidth, 0, 1),
-        boardY: clamp((event.currentTarget.scrollTop + midpointY - metrics.paddingY) / metrics.boardHeight, 0, 1),
+        boardX: clamp(
+          (event.currentTarget.scrollLeft + midpointX - metrics.paddingX - metrics.marginLeft) / metrics.boardWidth,
+          0,
+          1,
+        ),
+        boardY: clamp(
+          (event.currentTarget.scrollTop + midpointY - metrics.paddingY - metrics.marginTop) / metrics.boardHeight,
+          0,
+          1,
+        ),
       }
       pointerDragRef.current = null
 
@@ -366,56 +407,90 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
         onDragStart={(event) => event.preventDefault()}
       >
         <div ref={panSurfaceRef} className="box-content h-fit w-fit">
-          <div
-            id={`explorer-map-${player.id.toLowerCase()}`}
-            ref={boardRef}
-            className="relative shrink-0 bg-cover"
-            style={{
-              backgroundImage: `url(${player.board.imageURL})`,
-              aspectRatio: `${player.board.width}/${player.board.height}`,
-            }}
-          >
-            <svg
-              viewBox={`0 0 ${dimX * HEX_WIDTH + MAGIC_OFFSET_VALUE_X} ${dimY * HEX_HEIGHT + MAGIC_OFFSET_VALUE_Y}`}
-              className="absolute"
-              style={player.board.svgStyle}
+          <div ref={worldRef} className="grid h-fit w-fit">
+            <ObjectiveCards className="col-start-2 row-start-1 h-full w-full" aria-label="Guild objectives" />
+            <EraCards
+              player={player}
+              className="col-start-1 row-start-2 h-full w-full"
+              aria-label={`${player.id}'s Investigate cards`}
+            />
+            <div
+              id={`explorer-map-${player.id.toLowerCase()}`}
+              ref={boardRef}
+              className="relative col-start-2 row-start-2 shrink-0 bg-cover"
+              style={{
+                backgroundImage: `url(${player.board.imageURL})`,
+                aspectRatio: `${player.board.width}/${player.board.height}`,
+              }}
             >
-              {player.board.hexes.map((cols, colId) =>
-                cols.map(
-                  (hex, rowId) =>
-                    hex && (
-                      <HexPath
-                        player={player}
-                        isActive={isActive}
-                        hex={hex}
-                        key={`${rowId}-${colId}`}
-                        id={`${rowId}-${colId}`}
-                        y={HEX_HEIGHT * rowId + (colId % 2 === 0 ? MAGIC_OFFSET_VALUE_Y : 0)}
-                        x={HEX_WIDTH * colId + MAGIC_OFFSET_VALUE_X}
-                      />
-                    ),
-                ),
-              )}
-            </svg>
-            <EraCards player={player} />
+              <svg
+                viewBox={`0 0 ${dimX * HEX_WIDTH + MAGIC_OFFSET_VALUE_X} ${dimY * HEX_HEIGHT + MAGIC_OFFSET_VALUE_Y}`}
+                className="absolute"
+                style={player.board.svgStyle}
+              >
+                {player.board.hexes.map((cols, colId) =>
+                  cols.map(
+                    (hex, rowId) =>
+                      hex && (
+                        <HexPath
+                          player={player}
+                          isActive={isActive}
+                          hex={hex}
+                          key={`${rowId}-${colId}`}
+                          id={`${rowId}-${colId}`}
+                          y={HEX_HEIGHT * rowId + (colId % 2 === 0 ? MAGIC_OFFSET_VALUE_Y : 0)}
+                          x={HEX_WIDTH * colId + MAGIC_OFFSET_VALUE_X}
+                        />
+                      ),
+                  ),
+                )}
+              </svg>
+            </div>
           </div>
         </div>
       </div>
-      {onViewNextPlayer ? (
-        <button
-          type="button"
-          className="absolute right-[5%] top-[5%] z-10 font-bold text-primary-500 shadow-white text-shadow-lg sm:text-lg md:text-4xl"
-          aria-label={`Viewing ${player.id}'s board. View next player's board.`}
-          title="View next player's board"
-          onClick={onViewNextPlayer}
-        >
-          {player.id} <ExplorerBlock color={player.color} className="inline h-8" />
-        </button>
-      ) : (
-        <span className="absolute right-[5%] top-[5%] font-bold text-primary-500 shadow-white text-shadow-lg sm:text-lg md:text-4xl">
-          {player.id} <ExplorerBlock color={player.color} className="inline h-8" />
-        </span>
-      )}
+      <div className="absolute landscape:left-[4.5rem] left-2 right-2 top-[4.5rem] z-10 flex items-start gap-2 landscape:top-2">
+        <PlayerMessage className="min-w-0 w-fit shrink rounded-lg bg-slate-900/65 px-3 py-2 text-left text-sm font-semibold text-white shadow-lg backdrop-blur-sm mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs self-center" />
+        {onViewNextPlayer ? (
+          <button
+            type="button"
+            className="inline-flex ml-auto max-w-[45vw] shrink-0 items-center rounded-full border border-white/20 bg-slate-900/65 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900/80 focus:outline-none focus:ring-2 focus:ring-white/80 mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs"
+            aria-label={`Viewing ${player.id}'s board. View next player's board.`}
+            title="View next player's board"
+            onClick={onViewNextPlayer}
+          >
+            <PlayerName player={player} />
+          </button>
+        ) : (
+          <span className="inline-flex ml-auto max-w-[45vw] shrink-0 items-center rounded-full border border-white/20 bg-slate-900/65 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs">
+            <PlayerName player={player} />
+          </span>
+        )}
+      </div>
     </div>
   )
 }
+
+const PlayerName = ({ player }: { player: Player }) => (
+  <span className="flex min-w-0 items-center gap-2 mobile:gap-1.5 ph:gap-1.5 phone-landscape:gap-1.5">
+    <ExplorerBlock
+      color={player.color}
+      className="h-6 w-6 shrink-0 object-contain mobile:h-5 mobile:w-5 ph:h-5 ph:w-5 phone-landscape:h-5 phone-landscape:w-5"
+      aria-hidden="true"
+    />
+    <span className="truncate">{player.id}</span>
+    <span className="h-5 w-px shrink-0 bg-white/25 mobile:h-4 ph:h-4 phone-landscape:h-4" aria-hidden="true" />
+    <span
+      className="inline-flex shrink-0 items-center gap-1 font-bold tabular-nums text-white"
+      aria-label={`${player.coins} points`}
+    >
+      <img
+        src={coinImage.href}
+        alt=""
+        className="h-5 w-5 object-contain mobile:h-4 mobile:w-4 ph:h-4 ph:w-4 phone-landscape:h-4 phone-landscape:w-4"
+        aria-hidden="true"
+      />
+      {player.coins}
+    </span>
+  </span>
+)
