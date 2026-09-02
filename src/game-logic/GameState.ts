@@ -78,23 +78,23 @@ export interface GameInputs {
 export class GameState extends EventTarget {
   boardName: BoardName
 
-  soloMode: boolean
+  soloMode = false
 
   players: Player[] = []
-  activePlayer: Player
+  activePlayer!: Player
 
   era = 0
   currentTurn = 0
-  turnHistory: TurnHistory
+  turnHistory!: TurnHistory
 
-  explorerDeck: ExplorerDeck
-  currentExplorerCard: ExplorerCard | null
+  explorerDeck!: ExplorerDeck
+  currentExplorerCard!: ExplorerCard | null
 
   objectives: Objective[] = []
 
-  investigateDeck: InvestigateDeck
+  investigateDeck!: InvestigateDeck
 
-  treasureDeck: TreasureDeck
+  treasureDeck!: TreasureDeck
 
   readyPlayers: Player[] = []
 
@@ -411,7 +411,7 @@ export class Player extends EventTarget {
 
   gameState: GameState
   board: Board
-  moveHistory: MoveHistory
+  moveHistory!: MoveHistory
   scoreBoard: ScoreBoard
 
   replayableMoveHistory?: MoveHistory
@@ -425,7 +425,7 @@ export class Player extends EventTarget {
   coins = 0
 
   treasureCardsToDraw = 0 // use this value to increment when cards are earned, and decrement when they are drawn
-  treasureCards: TreasureHand
+  treasureCards!: TreasureHand
 
   connectedTradePosts: Hex[] = []
   chosenRoute: Hex[] = []
@@ -435,7 +435,7 @@ export class Player extends EventTarget {
 
   investigateCardCandidates: [InvestigateCard, InvestigateCard] | null = null
 
-  investigateCards: InvestigateHand
+  investigateCards!: InvestigateHand
   era4SelectedInvestigateCard: InvestigateCard | null = null
 
   cardPhase = 0 // some cards have complex logic in 2 or more phases
@@ -513,7 +513,7 @@ export class Player extends EventTarget {
     // replay each move
     this.replayableMoveHistory?.historicalMoves.forEach((historicalEra, i) => {
       // wipe the board if there are turns for this era, even if there are no moves registered yet in this era
-      if (this.gameState.turnHistory[`era${i + 1}`]?.[0]) {
+      if (this.gameState.turnHistory[`era${i + 1}` as 'era1']?.[0]) {
         this.board.wipe()
       }
 
@@ -524,7 +524,7 @@ export class Player extends EventTarget {
 
       historicalEra.forEach((historicalTurn, j) => {
         this.replayTurn = j
-        const cardId = this.gameState.turnHistory[`era${i + 1}`]?.[j]
+        const cardId = this.gameState.turnHistory[`era${i + 1}` as 'era1']?.[j]
 
         if (!cardId) {
           throw new Error('corrupted data')

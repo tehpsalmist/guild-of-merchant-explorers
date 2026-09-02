@@ -1,5 +1,6 @@
 import { CSSProperties } from 'react'
 import { BoardName, GameState, Player } from './GameState'
+import { CardPlacementRules } from './Cards'
 
 export type Terrain = 'mountain' | 'sand' | 'grass' | 'water' | 'wild'
 
@@ -277,10 +278,10 @@ export class Hex {
       return false
     }
 
-    const rules =
+    const rules: CardPlacementRules[] | null =
       typeof this.board.player.currentExplorerCard.rules === 'function'
         ? this.board.player.currentExplorerCard.rules(this.board.player)
-        : this.board.player.currentExplorerCard.rules
+        : this.board.player.currentExplorerCard.rules as unknown as (CardPlacementRules[] | null)
 
     const placedHexes = this.board.player.moveHistory.getPlacedHexes()
     const touchingHexes = this.board.hexContactIterator(this, true)
@@ -533,7 +534,7 @@ export class Hex {
 export class Region {
   terrain: Terrain
   hexes: Hex[] = []
-  land: Land
+  land?: Land
   board: Board
   villageCandidates: Hex[]
 
@@ -587,7 +588,7 @@ export class Land {
   hasBeenReached = false
   board: Board
   regions: Region[] = []
-  markableHex: Hex
+  markableHex?: Hex
 
   constructor(startingHex: Hex) {
     this.board = startingHex.board

@@ -52,7 +52,7 @@ type ComplexAlgorithm = {
 
 export interface SerializedObjective {
   id: string
-  turnAndEraOfFirstAward: [number, number]
+  turnAndEraOfFirstAward?: [number, number]
   isFirstBlocked: boolean
   isSecondBlocked: boolean
   firstPlayers: SerializedPlayer[]
@@ -80,8 +80,8 @@ export class Objective {
   firstPlayers: Player[] = []
   secondPlayers: Player[] = []
 
-  simpleAlgorithm: SimpleAlgorithm
-  complexAlgorithm: ComplexAlgorithm
+  simpleAlgorithm?: SimpleAlgorithm
+  complexAlgorithm?: ComplexAlgorithm
 
   matchingState = {
     regions: [] as string[],
@@ -89,7 +89,7 @@ export class Objective {
     ruinTypes: [] as string[],
   }
 
-  turnAndEraOfFirstAward: [number, number]
+  turnAndEraOfFirstAward?: [number, number]
 
   isFirstBlocked = false
   isSecondBlocked = false
@@ -176,9 +176,11 @@ export class Objective {
   }
 
   checkWithSimpleAlgorithm(p: Player) {
+    if (!this.simpleAlgorithm) return null
+
     const exploredHexes = p.board
       .getFlatHexes()
-      .filter((h) => this.isHexCondition(h, this.simpleAlgorithm.exploredSpace))
+      .filter((h) => this.isHexCondition(h, this.simpleAlgorithm!.exploredSpace))
 
     if (exploredHexes.length < this.simpleAlgorithm.quantity) {
       // didn't even meet first requirement
@@ -194,7 +196,7 @@ export class Objective {
       case 'on': {
         // for checking same-something, need to populate state first to check against it for each item
         exploredHexes.forEach((h) => {
-          switch (this.simpleAlgorithm.relativeTo?.type) {
+          switch (this.simpleAlgorithm!.relativeTo?.type) {
             case 'same-ruin-type':
               return h.isCovered && h.ruinSymbol && this.matchingState.ruinTypes.push(h.ruinSymbol)
             case 'same-terrain':
@@ -215,7 +217,7 @@ export class Objective {
   }
 
   checkWithComplexAlgorithm(p: Player) {
-    switch (this.complexAlgorithm.spec) {
+    switch (this.complexAlgorithm?.spec) {
       case 'westernmost-land':
         const exploredHexes = p.board.getHex(6, 1)?.land?.hexes.filter((h) => h.isExplored)
 
@@ -253,7 +255,7 @@ export class Objective {
         return (
           p.finalizedTradingRoutes.find(
             ([h1, h2]) =>
-              this.complexAlgorithm.value && h1.tradingPostValue * h2.tradingPostValue >= this.complexAlgorithm.value,
+              this.complexAlgorithm!.value && h1.tradingPostValue * h2.tradingPostValue >= this.complexAlgorithm!.value,
           ) ?? null
         )
       case 'trade-route-ice':
@@ -292,6 +294,8 @@ export class Objective {
 
         return null
     }
+
+    return null
   }
 
   isHexCondition(h: Hex, condition: SimpleAlgorithm['exploredSpace']) {
@@ -329,9 +333,9 @@ export class Objective {
   // there might appear to be a lot of overlap between this and isHexCondition, but there is also enough difference
   // that it is wiser to keep the logic separate.
   isHexOn(h: Hex) {
-    const condition = this.simpleAlgorithm.relativeTo
+    const condition = this.simpleAlgorithm?.relativeTo
 
-    if (!condition) return false
+    if (!condition || !this.simpleAlgorithm) return false
 
     switch (condition.type) {
       case 'any-terrain':
@@ -393,9 +397,9 @@ export class Objective {
 
   // keep in mind that this is used to check adjacent scenarios specifically, so it is not a 1:1 comparison with isHexOn
   isHexAdjacent(h: Hex) {
-    const condition = this.simpleAlgorithm.relativeTo
+    const condition = this.simpleAlgorithm?.relativeTo
 
-    if (!condition) return false
+    if (!condition || !this.simpleAlgorithm) return false
 
     const adjacentHexes = h.board.hexContactIterator(h, true)
 
