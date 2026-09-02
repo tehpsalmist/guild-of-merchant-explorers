@@ -127,7 +127,7 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
                     return (
                       <div
                         key={`${stat.name}-${index}`}
-                        className="grid min-h-12 grid-cols-[2.25rem,1fr,auto] items-center gap-2 py-1.5 mobile:min-h-10 mobile:grid-cols-[2rem,1fr,auto] mobile:py-1 phone-landscape:min-h-10 phone-landscape:grid-cols-[2rem,1fr,auto] phone-landscape:py-1"
+                        className="grid min-h-12 grid-cols-[2.25rem_1fr_auto] items-center gap-2 py-1.5 mobile:min-h-10 mobile:grid-cols-[2rem_1fr_auto] mobile:py-1 phone-landscape:min-h-10 phone-landscape:grid-cols-[2rem_1fr_auto] phone-landscape:py-1"
                       >
                         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-950/5 p-1 mobile:h-8 mobile:w-8 phone-landscape:h-8 phone-landscape:w-8">
                           {stat.image && <img className="h-full w-full object-contain" src={stat.image.href} alt="" />}

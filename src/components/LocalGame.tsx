@@ -84,7 +84,7 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
           className={clsx(
             className,
             'grid gap-4 p-4',
-            boardName ? 'mx-auto max-w-[50vw] grid-cols-1 place-content-center' : 'grid-cols-auto-2',
+            boardName ? 'mx-auto max-w-[50vw] grid-cols-1 place-content-center' : 'grid-cols-[repeat(2,minmax(0,auto))]',
           )}
         >
           <h2 className="col-span-full text-center">Choose A Board To Play</h2>

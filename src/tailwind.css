@@ -1,40 +1,164 @@
-@tailwind base;
+@import 'tailwindcss';
 
-h1 {
-  @apply text-4xl font-bold;
+/* @8thday/react emits Tailwind class strings at runtime. */
+@source '../node_modules/@8thday';
+
+@plugin '@tailwindcss/forms';
+
+/* Keep the previous class-driven dark mode and raw responsive breakpoints. */
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant ph (@media (max-width: 768px) and (max-height: 768px));
+@custom-variant mobile (@media (max-width: 639px));
+@custom-variant phone-landscape (@media (max-width: 1000px) and (max-height: 500px) and (orientation: landscape));
+@custom-variant hover (&:hover);
+
+@theme {
+  /* Tailwind v3 breakpoints, retained exactly. */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+
+  /* Tailwind v3 color values referenced by the app and @8thday/react. */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-900: #7f1d1d;
+  --color-red-950: #450a0a;
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-500: #f59e0b;
+  --color-amber-700: #b45309;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+  --color-sky-300: #7dd3fc;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+  --color-orange-500: #f97316;
+  --color-yellow-500: #eab308;
+
+  /* Project semantic colors from the previous theme. */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  /* Legacy utility values used by the app and @8thday/react. */
+  --radius-sm: 0.125rem;
+  --radius: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --blur-sm: 4px;
+  --blur: 8px;
+  --blur-md: 12px;
+  --blur-lg: 16px;
+  --blur-xl: 24px;
+  --blur-2xl: 40px;
+  --blur-3xl: 64px;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06),
+    0 -1px 4px -1px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+  --spacing-content: calc(100vh - 3rem);
+  --default-ring-width: 3px;
+  --default-ring-color: #3b82f6;
 }
 
-h2 {
-  @apply text-2xl font-semibold;
+/* Restore the v3 Preflight defaults changed by v4. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  h1 {
+    @apply text-4xl font-bold;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold;
+  }
+
+  h3 {
+    @apply text-xl font-bold;
+  }
+
+  h4 {
+    @apply text-lg font-bold;
+  }
+
+  h5 {
+    @apply text-base font-semibold;
+  }
+
+  h6 {
+    @apply text-sm font-semibold;
+  }
+
+  p {
+    @apply text-base font-normal;
+  }
+
+  em {
+    @apply italic;
+  }
 }
-
-h3 {
-  @apply text-xl font-bold;
-}
-
-h4 {
-  @apply text-lg font-bold;
-}
-
-h5 {
-  @apply text-base font-semibold;
-}
-
-h6 {
-  @apply text-sm font-semibold;
-}
-
-p {
-  @apply text-base font-normal;
-}
-
-em {
-  @apply italic;
-}
-
-@tailwind components;
-
-@tailwind utilities;
 
 @layer components {
   .game-board-grid {
@@ -52,21 +176,33 @@ em {
   }
 }
 
+@utility flex-center {
+  @apply flex items-center justify-center;
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility board-pan-viewport {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+/* Utilities removed in v4 but emitted by @8thday/react. */
 @layer utilities {
-  .flex-center {
-    @apply flex items-center justify-center;
+  .outline-none,
+  .focus\:outline-none:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
   }
 
-  .no-scrollbar {
-    -ms-overflow-style: none; /* Internet Explorer 10+ */
-    scrollbar-width: none; /* Firefox */
-  }
-  .no-scrollbar::-webkit-scrollbar {
-    display: none; /* Safari and Chrome */
-  }
-
-  .board-pan-viewport {
-    overscroll-behavior: contain;
-    touch-action: none;
+  .ring-black.ring-opacity-5 {
+    --tw-ring-color: rgb(0 0 0 / 0.05);
   }
 }
