@@ -305,7 +305,7 @@ export class GameState extends EventTarget {
   }
 
   fromJSON(data: SerializedGameState) {
-    this.players = data.players.map((d) => new Player(d, this, d.moveHistory))
+    this.players = data.players.map((d) => new Player(d, this, d.moveHistory, d.investigateCardCandidates))
     this.activePlayer = this.players[0]
 
     this.turnHistory = new TurnHistory(this, data.turnHistory)
@@ -386,6 +386,7 @@ export interface SerializedPlayer {
   id: string
   color: string
   moveHistory: SerializedMoveHistory
+  investigateCardCandidates: [SerializedCard, SerializedCard] | null
 }
 
 export type PlayerMode =
@@ -442,7 +443,12 @@ export class Player extends EventTarget {
 
   freeExploreQuantity = 0
 
-  constructor({ id, color }: PlayerInputs, gameState: GameState, serializedMoveHistory?: SerializedMoveHistory) {
+  constructor(
+    { id, color }: PlayerInputs,
+    gameState: GameState,
+    serializedMoveHistory?: SerializedMoveHistory,
+    serializedCandidates?: [SerializedCard, SerializedCard] | null,
+  ) {
     super()
 
     this.id = id
@@ -451,6 +457,13 @@ export class Player extends EventTarget {
     this.gameState = gameState
     this.board = new Board(getBoardData(this.gameState.boardName), this, this.gameState)
     this.scoreBoard = new ScoreBoard(this)
+
+    this.investigateCardCandidates = serializedCandidates
+      ? [
+          new InvestigateCard(investigateCardDataLookup[serializedCandidates[0].id]),
+          new InvestigateCard(investigateCardDataLookup[serializedCandidates[1].id]),
+        ]
+      : null
 
     this.replayableMoveHistory = new MoveHistory(this, this.gameState, serializedMoveHistory)
 
@@ -508,6 +521,10 @@ export class Player extends EventTarget {
   }
 
   replayMoves() {
+    // Earlier investigate-card moves clear this field as they are replayed. Preserve
+    // the pending choice from the serialized state and restore it after replay.
+    const serializedInvestigateCardCandidates = this.investigateCardCandidates
+
     this.replaying = true
 
     // replay each move
@@ -558,6 +575,7 @@ export class Player extends EventTarget {
     })
 
     this.replayableMoveHistory = undefined
+    this.investigateCardCandidates = serializedInvestigateCardCandidates
 
     this.determinePlayerMode()
 
@@ -638,6 +656,7 @@ export class Player extends EventTarget {
       id: this.id,
       color: this.color,
       moveHistory: this.moveHistory as SerializedMoveHistory,
+      investigateCardCandidates: this.investigateCardCandidates,
     }
   }
 }
