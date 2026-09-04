@@ -117,10 +117,10 @@ export const HexPath = ({ className = '', id, x, y, hex, player, isActive, ...pr
         d={`M${x},${y} h50 l25,43.3 l-25,43.3 h-50 l-25,-43.3 z`}
         className={clsx(className, 'fill-transparent', {
           'cursor-pointer hover:fill-red-500/15': isExplorable,
-          'cursor-pointer !fill-red-500/15': isExplorable && hovered && hasPiece,
-          'cursor-pointer !fill-blue-500/15 hover:!fill-blue-500/25': isVillageCandidate || isTradeCandidate,
-          'cursor-pointer !fill-yellow-500/15 hover:!fill-yellow-500/25': isTradeRouteCandidate,
-          'cursor-pointer !fill-green-500/15 hover:!fill-green-500/25': isSelectedTradeRoute,
+          'cursor-pointer fill-red-500/15!': isExplorable && hovered && hasPiece,
+          'cursor-pointer fill-blue-500/15! hover:fill-blue-500/25!': isVillageCandidate || isTradeCandidate,
+          'cursor-pointer fill-yellow-500/15! hover:fill-yellow-500/25!': isTradeRouteCandidate,
+          'cursor-pointer fill-green-500/15! hover:fill-green-500/25!': isSelectedTradeRoute,
         })}
         onClick={handleClick}
         {...props}
@@ -160,7 +160,7 @@ export const HexPath = ({ className = '', id, x, y, hex, player, isActive, ...pr
               {hasReachedMark && (
                 <img
                   src={exploredMarker.href}
-                  className="absolute -left-[10%] top-[10%] w-[70%] rounded-full ring-2 ring-primary-400 lg:ring-4"
+                  className="absolute left-[-10%] top-[10%] w-[70%] rounded-full ring-2 ring-primary-400 lg:ring-4"
                 />
               )}
               {hex.isCovered && hex.isTower && (

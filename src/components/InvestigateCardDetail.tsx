@@ -23,7 +23,7 @@ export const InvestigateCardDetail = ({ card, onClose }: InvestigateCardDetailPr
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
+      className="fixed inset-0 z-95 flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -37,7 +37,7 @@ export const InvestigateCardDetail = ({ card, onClose }: InvestigateCardDetailPr
       />
       <button
         type="button"
-        className="fixed z-[100] flex h-11 w-11 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
+        className="fixed z-100 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
         style={{
           top: 'max(0.5rem, env(safe-area-inset-top))',
           right: 'max(0.5rem, env(safe-area-inset-right))',

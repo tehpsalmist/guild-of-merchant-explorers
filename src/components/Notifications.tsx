@@ -68,7 +68,7 @@ export const Notifications = ({ className = '', ...props }: NotificationsProps) 
       </PopoverButton>
       <PopoverPanel
         anchor="bottom end"
-        className="z-20 min-w-64 max-w-96 rounded-md bg-white shadow-lg [--anchor-gap:theme(spacing.2)]"
+        className="z-20 min-w-64 max-w-96 rounded-md bg-white shadow-lg [--anchor-gap:--spacing(2)]"
       >
         <h3 className="p-2">Notifications</h3>
         <ul className="flex max-h-96 flex-col overflow-y-auto py-2">

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import React, { ComponentProps, useEffect, useState } from 'react'
-import { PlayerMode } from '../game-logic/GameState'
+import { Player, PlayerMode } from '../game-logic/GameState'
 import { useGameState } from '../hooks/useGameState'
 
 const messages: Record<PlayerMode, string> = {
@@ -16,16 +16,18 @@ const messages: Record<PlayerMode, string> = {
   'treasure-to-draw': 'Draw a treasure card!',
 }
 
-export interface PlayerMessageProps extends ComponentProps<'button'> {}
+export interface PlayerMessageProps extends ComponentProps<'button'> {
+  activePlayer: Player
+}
 
-export const PlayerMessage = ({ className = '', ...props }: PlayerMessageProps) => {
+export const PlayerMessage = ({ className = '', activePlayer, ...props }: PlayerMessageProps) => {
   const { gameState } = useGameState()
   const [expanded, setExpanded] = useState(false)
 
-  const mode = gameState.activePlayer.mode
+  const mode = activePlayer.mode
   const message =
     mode === 'exploring'
-      ? gameState.currentExplorerCard?.rules(gameState.activePlayer)?.[gameState.activePlayer.cardPhase]?.message ??
+      ? gameState.currentExplorerCard?.rules(activePlayer)?.[activePlayer.cardPhase]?.message ??
         'Explore!'
       : messages[mode]
 

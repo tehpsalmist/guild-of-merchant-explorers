@@ -89,12 +89,12 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
         <Button
           variant="primary"
           type="button"
-          className="bottom-15 !fixed right-3 !rounded-full sm:hidden"
+          className="bottom-15 fixed! right-3 rounded-full! sm:hidden"
           PreIcon={PlusIcon}
           onClick={openRoom}
         />
       </div>
-      <ul className="flex min-h-[calc(100vh-theme(spacing.24))] flex-col pt-2 sm:min-h-[calc(100vh-(theme(spacing.24)+theme(spacing.2)))]">
+      <ul className="flex min-h-[calc(100vh-(--spacing(24)))] flex-col pt-2 sm:min-h-[calc(100vh-(--spacing(24)+(--spacing(2))))]">
         {hostedRooms.length > 0 && <strong className="bg-primary-50 pl-2">You Are Hosting:</strong>}
         {hostedRooms.map((room) => (
           <li key={room.id} className="flex items-center gap-2 px-2 py-1 even:bg-gray-50">
@@ -128,7 +128,7 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
               {!inviteAccepted && (
                 <Button
                   variant="primary"
-                  className="min-h-8 !py-0 px-1"
+                  className="min-h-8 py-0! px-1"
                   PreIcon={CheckIcon}
                   onClick={async () => {
                     const res = await nhost.graphql.request(UPDATE_ROOM_MEMBER, {
@@ -149,7 +149,7 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
               )}
               <Button
                 variant={inviteAccepted ? 'secondary' : 'destructive'}
-                className="min-h-8 !py-0 px-1"
+                className="min-h-8 py-0! px-1"
                 PreIcon={inviteAccepted ? ArrowLeftStartOnRectangleIcon : XMarkIcon}
                 onClick={async () => {
                   const res = await nhost.graphql.request(DISINVITE_PLAYER, {
@@ -175,7 +175,7 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
             <span className="mr-auto text-sm">{room.name}</span>
             <Button
               variant="primary"
-              className="min-h-8 !py-0 px-1"
+              className="min-h-8 py-0! px-1"
               PreIcon={ArrowLeftEndOnRectangleIcon}
               onClick={async () => {
                 const res = await nhost.graphql.request(REQUEST_TO_JOIN_ROOM, { roomId: room.id })

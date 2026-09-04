@@ -33,12 +33,12 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
 
   return (
     <Modal
-      className="!max-h-[96dvh] !max-w-[96dvw] !overflow-hidden !rounded-3xl !bg-transparent !p-0 shadow-2xl mobile:!h-[100dvh] mobile:!max-h-[100dvh] mobile:!max-w-none mobile:!rounded-none phone-landscape:!h-[100dvh] phone-landscape:!max-h-[100dvh] phone-landscape:!max-w-none phone-landscape:!rounded-none"
+      className="max-h-[96dvh]! max-w-[96dvw]! overflow-hidden! rounded-3xl! bg-transparent! p-0! shadow-2xl mobile:h-dvh! mobile:max-h-dvh! mobile:max-w-none! mobile:rounded-none! phone-landscape:h-dvh! phone-landscape:max-h-dvh! phone-landscape:max-w-none! phone-landscape:rounded-none!"
       bgClass="bg-slate-950/80 backdrop-blur-sm"
       onClose={onClose}
     >
       <section
-        className="relative flex max-h-[96dvh] w-[min(94dvw,72rem)] flex-col overflow-hidden text-white mobile:h-[100dvh] mobile:max-h-[100dvh] mobile:w-screen phone-landscape:h-[100dvh] phone-landscape:max-h-[100dvh] phone-landscape:w-screen"
+        className="relative flex max-h-[96dvh] w-[min(94dvw,72rem)] flex-col overflow-hidden text-white mobile:h-dvh mobile:max-h-dvh mobile:w-screen phone-landscape:h-dvh phone-landscape:max-h-dvh phone-landscape:w-screen"
         style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
         aria-labelledby="scoreboard-title"
       >
@@ -181,7 +181,7 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
 
         <footer className="relative flex shrink-0 flex-col items-center gap-2 border-t border-white/20 bg-black/20 px-4 py-3 mobile:py-2 phone-landscape:py-1">
           <Button
-            className="phone-landscape:!py-1"
+            className="phone-landscape:py-1!"
             disabled={!allDone}
             variant={allDone ? 'primary' : 'dismissive'}
             onClick={onNewGame}

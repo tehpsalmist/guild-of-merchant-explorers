@@ -79,9 +79,9 @@ export class GameState extends EventTarget {
   boardName: BoardName
 
   soloMode = false
+  localMode = true
 
   players: Player[] = []
-  activePlayer!: Player
 
   era = 0
   currentTurn = 0
@@ -119,7 +119,7 @@ export class GameState extends EventTarget {
 
       this.players = playerData.map((d) => new Player(d, this))
 
-      this.activePlayer = this.players[0]
+      this.emitPlayerTurn(this.players[0].id)
 
       this.soloMode = this.players.length === 1
 
@@ -175,8 +175,8 @@ export class GameState extends EventTarget {
     }
 
     for (const player of this.players) {
-      if (!this.readyPlayers.includes(player)) {
-        this.activePlayer = player
+      if (!this.readyPlayers.includes(player) && this.localMode) {
+        this.emitPlayerTurn(player.id)
         return
       }
     }
@@ -258,6 +258,10 @@ export class GameState extends EventTarget {
     this.dispatchEvent(new CustomEvent('onserialize', { detail: { serializedData } }))
   }
 
+  emitPlayerTurn(playerId: string) {
+    this.dispatchEvent(new CustomEvent('onplayerturn', {detail:{playerId}}))
+  }
+
   enqueueSerialization() {
     clearTimeout(this.serializationTimeout)
 
@@ -306,7 +310,6 @@ export class GameState extends EventTarget {
 
   fromJSON(data: SerializedGameState) {
     this.players = data.players.map((d) => new Player(d, this, d.moveHistory, d.investigateCardCandidates))
-    this.activePlayer = this.players[0]
 
     this.turnHistory = new TurnHistory(this, data.turnHistory)
     this.objectives = data.objectives.map(

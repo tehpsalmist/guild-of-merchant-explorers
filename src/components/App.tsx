@@ -43,7 +43,7 @@ export const App = (_: AppProps) => {
               <Avatar avatarUrl={user?.avatarUrl} className="max-h-10 rounded-full" />
             </NavLink>
             <Notifications className={navClasses} />
-            <button className={clsx(navClasses, 'ml-auto !hidden sm:!flex')} onClick={() => signOut()}>
+            <button className={clsx(navClasses, 'ml-auto hidden! sm:flex!')} onClick={() => signOut()}>
               Logout
             </button>
           </SignedIn>

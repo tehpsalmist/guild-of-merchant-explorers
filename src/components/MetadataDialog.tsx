@@ -22,13 +22,13 @@ export const MetadataDialog = ({ children, eyebrow = 'Guild Records', title, onC
 
   return (
     <Modal
-      className="!max-h-[94dvh] !max-w-[96dvw] !overflow-hidden !rounded-3xl !bg-transparent !p-0 shadow-2xl mobile:!h-[100dvh] mobile:!max-h-[100dvh] mobile:!max-w-none mobile:!rounded-none phone-landscape:!h-[100dvh] phone-landscape:!max-h-[100dvh] phone-landscape:!max-w-none phone-landscape:!rounded-none"
+      className="max-h-[94dvh]! max-w-[96dvw]! overflow-hidden! rounded-3xl! bg-transparent! p-0! shadow-2xl mobile:h-dvh! mobile:max-h-dvh! mobile:max-w-none! mobile:rounded-none! phone-landscape:h-dvh! phone-landscape:max-h-dvh! phone-landscape:max-w-none! phone-landscape:rounded-none!"
       bgClass="bg-slate-950/80 backdrop-blur-sm"
       overlayClasses="fixed inset-0 z-[80] flex items-center justify-center"
       onClose={onClose}
     >
       <section
-        className="relative flex h-[min(94dvh,52rem)] w-[min(94dvw,72rem)] flex-col overflow-hidden text-white mobile:h-[100dvh] mobile:w-screen phone-landscape:h-[100dvh] phone-landscape:w-screen"
+        className="relative flex h-[min(94dvh,52rem)] w-[min(94dvw,72rem)] flex-col overflow-hidden text-white mobile:h-dvh mobile:w-screen phone-landscape:h-dvh phone-landscape:w-screen"
         style={{ backgroundImage: `url(${plankPanelHorizontal.href})` }}
         role="dialog"
         aria-modal="true"
@@ -38,7 +38,7 @@ export const MetadataDialog = ({ children, eyebrow = 'Guild Records', title, onC
 
         <button
           type="button"
-          className="fixed z-[90] flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
+          className="fixed z-90 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
           style={{
             top: 'max(0.5rem, env(safe-area-inset-top))',
             right: 'max(0.5rem, env(safe-area-inset-right))',

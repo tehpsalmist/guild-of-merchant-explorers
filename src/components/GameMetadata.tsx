@@ -173,7 +173,7 @@ const PlayerStuffButton = ({
       <ExplorerBlock
         color={color}
         className={clsx(
-          'absolute z-[22] object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
+          'absolute z-22 object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
           hasCards ? 'bottom-0 left-[31%] h-6 w-6' : 'bottom-0 left-0 h-8 w-8',
         )}
         aria-hidden="true"
@@ -184,7 +184,7 @@ const PlayerStuffButton = ({
         alt=""
         className={clsx(
           color,
-          'absolute z-[21] object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
+          'absolute z-21 object-contain drop-shadow-[0_3px_2px_rgba(0,0,0,0.9)]',
           hasCards ? 'bottom-0 right-0 h-7 w-7' : 'bottom-0 right-0 h-9 w-9',
         )}
         aria-hidden="true"
@@ -207,7 +207,7 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
     ? gameState.currentExplorerCard.getInvestigateCard?.(player)
     : null
   const activeCardImage =
-    gameState.activePlayer.mode === 'free-exploring'
+    player.mode === 'free-exploring'
       ? placeBlock
       : activeInvestigateCard?.imageUrl ?? gameState.currentExplorerCard?.imageUrl
 
@@ -232,7 +232,7 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
   return (
     <>
       <nav
-        className="pointer-events-none fixed right-2 top-2 z-[60] flex flex-row-reverse gap-2 landscape:bottom-2 landscape:left-2 landscape:right-auto landscape:top-auto landscape:flex-col-reverse"
+        className="pointer-events-none fixed right-2 top-2 z-60 flex flex-row-reverse gap-3 landscape:bottom-2 landscape:left-2 landscape:right-auto landscape:top-auto landscape:flex-col-reverse"
         aria-label="Game information"
       >
         <div className="pointer-events-auto">
@@ -480,7 +480,7 @@ const PlayerStuffDialog = ({ player, onClose }: { player: Player; onClose(): voi
           )}
         </section>
 
-        {player === gameState.activePlayer && player.moveHistory.size > 1 && (
+        {player.moveHistory.size > 1 && (
           <footer className="mt-3 flex items-center justify-center rounded-2xl border border-white/15 bg-black/20 p-3">
             <Button variant="dismissive" onClick={() => player.selectUndo(true)}>
               Reset This Turn

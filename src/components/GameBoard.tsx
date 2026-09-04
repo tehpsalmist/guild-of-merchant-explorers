@@ -84,15 +84,16 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const updateState = useState(0)[1]
 
   const { gameState, resetGame } = useGameState()
-  const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.activePlayer
+  const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.players[0]
+
   const isInvestigateChoice = ['choosing-investigate-card', 'choosing-investigate-card-reuse'].includes(
-    gameState.activePlayer.mode,
+    viewedPlayer.mode,
   )
-  const isPlayerChoice = ['user-prompting', 'treasure-to-draw'].includes(gameState.activePlayer.mode)
+  const isPlayerChoice = ['user-prompting', 'treasure-to-draw'].includes(viewedPlayer.mode)
 
   useEventListener('keydown', (e) => {
     if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
-      gameState.activePlayer.selectUndo()
+      viewedPlayer.selectUndo()
     }
   })
 
@@ -101,19 +102,24 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
     const serializationListener = (e: CustomEvent<{ serializedData: string }>) => {
       localStorage.setItem('gome-serialized-game-state', e.detail.serializedData)
     }
+    const playerTurnListener = (e: CustomEvent<{playerId: string}>) => {
+      setViewedPlayerId(e.detail.playerId)
+    }
 
     gameState.addEventListener('onstatechange', stateListener)
     gameState.addEventListener('onserialize', { handleEvent: serializationListener })
+    gameState.addEventListener('onplayerturn', { handleEvent: playerTurnListener })
 
     return () => {
       gameState.removeEventListener('onstatechange', stateListener)
       gameState.removeEventListener('onserialize', { handleEvent: serializationListener })
+      gameState.removeEventListener('onplayerturn', { handleEvent: playerTurnListener })
     }
   }, [gameState])
 
   useEffect(() => {
-    setViewedPlayerId(gameState.activePlayer.id)
-  }, [gameState.activePlayer.id])
+    setViewedPlayerId(viewedPlayer.id)
+  }, [viewedPlayer.id])
 
   const viewNextPlayer = () => {
     const currentIndex = gameState.players.indexOf(viewedPlayer)
@@ -123,7 +129,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   }
 
   useEffect(() => {
-    const activePlayer = gameState.activePlayer
+    const activePlayer = viewedPlayer
     const treasureListener = () => {
       const drawnTreasure = activePlayer.treasureCards.cards[activePlayer.treasureCards.size - 1]
 
@@ -137,7 +143,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
     activePlayer.addEventListener('treasure-gained', treasureListener)
 
     return () => activePlayer.removeEventListener('treasure-gained', treasureListener)
-  }, [gameState.activePlayer])
+  }, [viewedPlayer])
 
   useEffect(() => {
     if (newTreasureCard) {
@@ -164,18 +170,18 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   }, [gameState.gameOver, isInvestigateChoice, isPlayerChoice, newTreasureCard])
 
   const isEndOfPhase =
-    gameState.activePlayer.moveHistory.getPlacedHexes()[gameState.activePlayer.cardPhase]?.size ===
-    gameState.activePlayer.currentCardRules?.[gameState.activePlayer.cardPhase]?.limit
-  const noLegalMoves = isEndOfPhase || gameState.activePlayer.board.getFlatHexes().every((h) => !h.isExplorable())
+    viewedPlayer.moveHistory.getPlacedHexes()[viewedPlayer.cardPhase]?.size ===
+    viewedPlayer.currentCardRules?.[viewedPlayer.cardPhase]?.limit
+  const noLegalMoves = isEndOfPhase || viewedPlayer.board.getFlatHexes().every((h) => !h.isExplorable())
   const investigateActionCards =
     (gameState.era < 3
-      ? gameState.activePlayer.investigateCardCandidates
-      : gameState.activePlayer.investigateCards.keptCards) ?? []
+      ? viewedPlayer.investigateCardCandidates
+      : viewedPlayer.investigateCards.keptCards) ?? []
 
   return (
     <>
       <GameMetadata viewedPlayer={viewedPlayer} />
-      <div className="fixed bottom-2 left-2 landscape:left-[4.5rem] z-[65] flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 landscape:max-w-[calc(100dvw-10rem)]">
+      <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 landscape:max-w-[calc(100dvw-10rem)]">
         {isInvestigateChoice && (
           <GameActionButton
             label="Choose Investigate Card"
@@ -184,10 +190,10 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
             onClick={() => setInvestigateModalOpen(true)}
           />
         )}
-        {gameState.activePlayer.mode === 'exploring' &&
-          gameState.activePlayer.currentCardRules &&
+        {viewedPlayer.mode === 'exploring' &&
+          viewedPlayer.currentCardRules &&
           (!gameState.currentExplorerCard ||
-            (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 === gameState.activePlayer.cardPhase) && (
+            (viewedPlayer.currentCardRules?.length ?? 1) - 1 === viewedPlayer.cardPhase) && (
             <GameActionButton
               label={gameState.soloMode ? 'Next Card' : 'End Turn'}
               highlighted={noLegalMoves}
@@ -196,18 +202,18 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
                   noLegalMoves ||
                   confirm('There are legal moves left on the board, are you sure you want to end your turn?')
                 ) {
-                  gameState.activePlayer.selectMove({ action: 'confirm-turn' })
+                  viewedPlayer.selectMove({ action: 'confirm-turn' })
                 }
               }}
             />
           )}
-        {gameState.activePlayer.mode === 'exploring' &&
-          gameState.activePlayer.currentCardRules &&
-          (gameState.activePlayer.currentCardRules?.length ?? 1) - 1 !== gameState.activePlayer.cardPhase && (
+        {viewedPlayer.mode === 'exploring' &&
+          viewedPlayer.currentCardRules &&
+          (viewedPlayer.currentCardRules?.length ?? 1) - 1 !== viewedPlayer.cardPhase && (
             <GameActionButton
               label="Next Phase"
               highlighted={isEndOfPhase}
-              onClick={() => gameState.activePlayer.selectMove({ action: 'advance-card-phase' })}
+              onClick={() => viewedPlayer.selectMove({ action: 'advance-card-phase' })}
             />
           )}
         {gameState.gameOver && (
@@ -216,29 +222,29 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
         {!userPromptOpen && isPlayerChoice && !newTreasureCard && (
           <GameActionButton label="View Choices" highlighted onClick={() => setUserPromptOpen(true)} />
         )}
-        {gameState.activePlayer.moveHistory.size > 0 && (
+        {viewedPlayer.moveHistory.size > 0 && (
           <GameActionButton
             label="Undo"
             icon={<UTurnIcon className="h-7 w-7" aria-hidden="true" />}
-            onClick={() => gameState.activePlayer.selectUndo()}
+            onClick={() => viewedPlayer.selectUndo()}
           />
         )}
       </div>
       <EraLabel
-        className="pointer-events-none fixed bottom-2 right-2 z-50 flex opacity-80"
+        className="pointer-events-none fixed bottom-2 right-2 z-50"
         aria-label={`Era ${gameState.era + 1}`}
       />
       <main className={`${className} game-board-grid relative w-full`} {...props}>
         <ExplorerMap
           key={viewedPlayer.id}
           player={viewedPlayer}
-          isActive={viewedPlayer === gameState.activePlayer}
+          isActive={viewedPlayer === viewedPlayer}
           onViewNextPlayer={gameState.players.length > 1 ? viewNextPlayer : undefined}
         />
       </main>
       {isPlayerChoice && userPromptOpen && !newTreasureCard && (
         <PlayerChoicesDialog
-          player={gameState.activePlayer}
+          player={viewedPlayer}
           onClose={() => setUserPromptOpen(false)}
           onDrawTreasure={() => {
             const [treasureCard] = gameState.treasureDeck.drawCards()
@@ -248,32 +254,32 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
             setUserPromptOpen(false)
             if (treasureCard.discard) gameState.treasureDeck.discard(treasureCard)
 
-            gameState.activePlayer.selectMove({ action: 'draw-treasure', treasureCard })
+            viewedPlayer.selectMove({ action: 'draw-treasure', treasureCard })
           }}
           onTrade={() => {
             setUserPromptOpen(false)
-            gameState.activePlayer.setMode(
-              gameState.activePlayer.connectedTradePosts.length === 2 ? 'trading' : 'choosing-trade-route',
+            viewedPlayer.setMode(
+              viewedPlayer.connectedTradePosts.length === 2 ? 'trading' : 'choosing-trade-route',
             )
           }}
           onPlaceVillage={() => {
             setUserPromptOpen(false)
-            gameState.activePlayer.setMode('choosing-village')
+            viewedPlayer.setMode('choosing-village')
           }}
           onUndo={() => {
             setUserPromptOpen(false)
-            gameState.activePlayer.selectUndo()
+            viewedPlayer.selectUndo()
           }}
         />
       )}
-      {(isInvestigateChoice || gameState.activePlayer.mode === '') && investigateModalOpen && !newTreasureCard && (
+      {(isInvestigateChoice) && investigateModalOpen && !newTreasureCard && (
         <InvestigateChoiceDialog
           era={gameState.era}
-          playerName={gameState.activePlayer.id}
+          playerName={viewedPlayer.id}
           cards={
             (gameState.era < 3
-              ? gameState.activePlayer.investigateCardCandidates
-              : gameState.activePlayer.investigateCards.keptCards) ?? []
+              ? viewedPlayer.investigateCardCandidates
+              : viewedPlayer.investigateCards.keptCards) ?? []
           }
           onClose={() => setInvestigateModalOpen(false)}
           onSelect={(candidate, index, cards) => {
@@ -286,14 +292,14 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
                 })
               }
               setInvestigateModalOpen(false)
-              gameState.activePlayer.selectMove({
+              viewedPlayer.selectMove({
                 action: 'choose-investigate-card',
                 chosenCard: candidate,
                 discardedCard,
               })
             } else {
               setInvestigateModalOpen(false)
-              gameState.activePlayer.selectMove({ action: 'choose-investigate-card-reuse', era: index })
+              viewedPlayer.selectMove({ action: 'choose-investigate-card-reuse', era: index })
             }
           }}
         />

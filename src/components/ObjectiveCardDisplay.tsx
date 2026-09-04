@@ -10,7 +10,7 @@ export interface ObjectiveCardDisplayProps extends ComponentProps<'div'> {
 }
 
 export const ObjectiveCardDisplay = ({ objective, position, className, ...props }: ObjectiveCardDisplayProps) => (
-  <div className={clsx('relative aspect-[1042/744] overflow-hidden rounded-[3%]', className)} {...props}>
+  <div className={clsx('relative aspect-1042/744 overflow-hidden rounded-[3%]', className)} {...props}>
     <img
       src={objective.imageUrl.href}
       alt={`Objective ${position + 1}`}

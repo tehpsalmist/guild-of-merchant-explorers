@@ -56,13 +56,13 @@ export const ExplorerMatModal = ({ player, onClose }: ExplorerMatModalProps) => 
 
   return (
     <Modal
-      className="!max-h-none !max-w-none !overflow-visible !rounded-none !bg-transparent !p-0 !shadow-none"
+      className="max-h-none! max-w-none! overflow-visible! rounded-none! bg-transparent! p-0! shadow-none!"
       bgClass="bg-slate-950/85 backdrop-blur-sm"
       overlayClasses="fixed inset-0 z-[80] flex items-center justify-center"
       onClose={onClose}
     >
       <section
-        className="relative aspect-[1877/1344] overflow-hidden drop-shadow-[0_18px_22px_rgba(0,0,0,0.75)]"
+        className="relative aspect-1877/1344 overflow-hidden drop-shadow-[0_18px_22px_rgba(0,0,0,0.75)]"
         style={{ height: 'min(94dvh, 68.74dvw, 51.54rem)' }}
         role="dialog"
         aria-modal="true"
@@ -158,7 +158,7 @@ const InvestigateCardButton = ({
 const CloseButton = ({ label, onClick }: { label: string; onClick(): void }) => (
   <button
     type="button"
-    className="fixed z-[90] flex h-11 w-11 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
+    className="fixed z-90 flex h-11 w-11 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-white/80"
     style={{
       top: 'max(0.5rem, env(safe-area-inset-top))',
       right: 'max(0.5rem, env(safe-area-inset-right))',

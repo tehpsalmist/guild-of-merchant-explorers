@@ -449,8 +449,8 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
           </div>
         </div>
       </div>
-      <div className="absolute landscape:left-[4.5rem] left-2 right-2 top-[4.5rem] z-10 flex items-start gap-2 landscape:top-2">
-        <PlayerMessage className="min-w-0 w-fit shrink rounded-lg bg-slate-900/65 px-3 py-2 text-left text-sm font-semibold text-white shadow-lg backdrop-blur-sm mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs self-center" />
+      <div className="absolute landscape:left-18 left-2 right-2 top-18 z-10 flex items-start gap-2 landscape:top-2">
+        <PlayerMessage className="min-w-0 w-fit shrink rounded-lg bg-slate-900/65 px-3 py-2 text-left text-sm font-semibold text-white shadow-lg backdrop-blur-sm mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs self-center" activePlayer={player} />
         {onViewNextPlayer ? (
           <button
             type="button"
