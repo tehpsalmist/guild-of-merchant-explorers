@@ -393,29 +393,51 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                   </p>
                 </div>
               ) : (
-                <ol className="space-y-4" aria-live="polite" aria-label="Conversation messages">
+                <ol aria-live="polite" aria-label="Conversation messages">
                   {chatMessages.map((chatMessage, index) => {
+                    const previousMessage = chatMessages[index - 1]
+                    const nextMessage = chatMessages[index + 1]
+                    const followsSameSender =
+                      previousMessage?.id === chatMessage.id &&
+                      chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
+                    const followedBySameSender =
+                      nextMessage?.id === chatMessage.id &&
+                      nextMessage.sentAt.getTime() - chatMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
+                    const showTimestamp =
+                      !previousMessage ||
+                      chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() >= MESSAGE_GROUP_WINDOW_MS
                     const isMine = chatMessage.id === currentMember?.id
                     const playerId = memberUserIdLookup[chatMessage.id]
                     const player = userLookup[playerId]
 
                     return (
-                      <li key={`${chatMessage.id}-${chatMessage.sentAt.getTime()}-${index}`} className={clsx('flex', isMine && 'justify-end')}>
+                      <li
+                        key={`${chatMessage.id}-${chatMessage.sentAt.getTime()}-${index}`}
+                        className={clsx('flex', index > 0 && (followsSameSender ? 'mt-1.5' : 'mt-4'), isMine && 'justify-end')}
+                      >
                         <div className={clsx('max-w-[88%] sm:max-w-[75%]', isMine && 'text-right')}>
-                          <div className="mb-1 flex items-baseline gap-2 px-1">
-                            <span className="truncate text-xs font-bold text-amber-100/60">
-                              {isMine ? 'You' : player?.displayName ?? 'Explorer'}
-                            </span>
-                            <time className="text-[0.65rem] text-amber-100/30" dateTime={chatMessage.sentAt.toISOString()}>
-                              {formatMessageTime(chatMessage.sentAt)}
-                            </time>
-                          </div>
+                          {(!followsSameSender || showTimestamp) && (
+                            <div className="mb-1 flex items-baseline gap-2 px-1">
+                              {!followsSameSender && (
+                                <span className="truncate text-xs font-bold text-amber-100/60">
+                                  {isMine ? 'You' : player?.displayName ?? 'Explorer'}
+                                </span>
+                              )}
+                              {showTimestamp && (
+                                <time
+                                  className="text-[0.65rem] text-amber-100/30"
+                                  dateTime={chatMessage.sentAt.toISOString()}
+                                >
+                                  {formatMessageTime(chatMessage.sentAt)}
+                                </time>
+                              )}
+                            </div>
+                          )}
                           <p
                             className={clsx(
                               'whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-sm leading-6 shadow-md',
-                              isMine
-                                ? 'rounded-br-sm bg-[#f5edcf] text-slate-950'
-                                : 'rounded-bl-sm border border-amber-100/10 bg-white/8 text-amber-50',
+                              isMine ? 'bg-[#f5edcf] text-slate-950' : 'border border-amber-100/10 bg-white/8 text-amber-50',
+                              !followedBySameSender && (isMine ? 'rounded-br-sm' : 'rounded-bl-sm'),
                             )}
                           >
                             {chatMessage.message}
@@ -509,3 +531,4 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
 
 const messageTimeFormatter = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' })
 const formatMessageTime = (date: Date) => messageTimeFormatter.format(date)
+const MESSAGE_GROUP_WINDOW_MS = 3 * 60 * 1000
