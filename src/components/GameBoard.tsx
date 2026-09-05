@@ -25,14 +25,14 @@ const GameActionButton = ({ label, icon, highlighted = false, className, ...prop
     {...props}
     type="button"
     className={clsx(
-      'group flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-1 text-white shadow-lg backdrop-blur-sm transition-all focus:outline-none focus:ring-2 focus:ring-white/80',
+      'group relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full p-1 text-white shadow-lg backdrop-blur-sm transition-all focus:outline-none focus:ring-2 focus:ring-white/80',
       highlighted
         ? 'bg-primary-600/90 ring-2 ring-primary-200 hover:bg-primary-500'
         : 'bg-slate-900/55 hover:bg-slate-900/75',
       className,
     )}
     aria-label={props['aria-label'] ?? label}
-    title={props.title ?? label}
+    title={props.title ?? (icon ? label : undefined)}
   >
     {icon ?? (
       <span
@@ -42,6 +42,11 @@ const GameActionButton = ({ label, icon, highlighted = false, className, ...prop
         {label.split(' ').map((word, position) => (
           <span key={`${word}-${position}`}>{word}</span>
         ))}
+      </span>
+    )}
+    {icon && (
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-80 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block">
+        {label}
       </span>
     )}
   </button>
@@ -181,7 +186,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   return (
     <>
       <GameMetadata viewedPlayer={viewedPlayer} />
-      <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 landscape:max-w-[calc(100dvw-10rem)]">
+      <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 hover:z-80 focus-within:z-80 landscape:max-w-[calc(100dvw-10rem)]">
         {isInvestigateChoice && (
           <GameActionButton
             label="Choose Investigate Card"

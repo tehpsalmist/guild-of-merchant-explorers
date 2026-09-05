@@ -35,6 +35,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
   private readyNonce?: string
   private lastReadyNonce?: string
   private reconnectTimer?: ReturnType<typeof setTimeout>
+  private pendingMessages: string[] = []
   destroyed = false
 
   constructor(
@@ -56,10 +57,13 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
 
   sendMessage(message: string) {
     if (!this.peer?.connected) {
-      return this.connectToCoordinator()
+      this.pendingMessages.push(message)
+      this.pendingMessages = this.pendingMessages.slice(-50)
+      return false
     }
 
     this.peer.send(message)
+    return true
   }
 
   addStream(stream: MediaStream) {
@@ -74,6 +78,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
 
     this.destroyed = true
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.pendingMessages = []
     this.updateHandshakeState('closed')
     this.destroyPeer()
     this.serverConnection.destroy()
@@ -168,7 +173,19 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
     })
 
     peer.on('connect', () => {
-      if (peer === this.peer) this.updateHandshakeState('connected')
+      if (peer !== this.peer) return
+
+      this.updateHandshakeState('connected')
+      const queuedMessages = this.pendingMessages.splice(0)
+      for (let index = 0; index < queuedMessages.length; index += 1) {
+        try {
+          peer.send(queuedMessages[index])
+        } catch {
+          this.pendingMessages.unshift(...queuedMessages.slice(index))
+          this.scheduleReconnect()
+          break
+        }
+      }
     })
 
     peer.on('data', (data) => {

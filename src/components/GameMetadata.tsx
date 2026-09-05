@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import React, { ComponentType, SVGProps, useEffect, useState } from 'react'
-import { HomeIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
+import { HomeIcon } from '@heroicons/react/24/outline'
 import { Button } from '@8thday/react'
 import { useNavigate } from 'react-router-dom'
 import type { Objective } from '../game-logic/Objective'
@@ -12,6 +12,7 @@ import {
   coinImage,
   crystalImage,
   eraAnyBlocker,
+  explorerMat,
   placeBlock,
   towerImage,
   tradingPostGrass,
@@ -109,11 +110,13 @@ const ObjectiveFanButton = ({
 )
 
 const PlayerStuffButton = ({
+  playerName,
   color,
   investigateCards,
   selected,
   onClick,
 }: {
+  playerName: string
   color: string
   investigateCards: Array<{ id: string; imageUrl: URL }>
   selected: boolean
@@ -121,6 +124,7 @@ const PlayerStuffButton = ({
 }) => {
   const cards = investigateCards.slice(0, 5)
   const hasCards = cards.length > 0
+  const label = `${playerName}'s Stuff`
 
   return (
     <button
@@ -129,8 +133,8 @@ const PlayerStuffButton = ({
         'group relative flex h-14 w-14 items-center justify-center transition focus:outline-none focus:ring-2 focus:ring-white/80',
         selected && 'scale-105',
       )}
-      aria-label="Player's Stuff"
-      title="Player's Stuff"
+      aria-label={label}
+      title={label}
       aria-expanded={selected}
       onClick={onClick}
     >
@@ -192,7 +196,7 @@ const PlayerStuffButton = ({
       />
 
       <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
-        Player's Stuff
+        {label}
       </span>
     </button>
   )
@@ -232,7 +236,7 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
   return (
     <>
       <nav
-        className="pointer-events-none fixed right-2 top-2 z-60 flex flex-row-reverse gap-3 landscape:bottom-2 landscape:left-2 landscape:right-auto landscape:top-auto landscape:flex-col-reverse"
+        className="pointer-events-none fixed right-2 top-2 z-60 flex flex-row-reverse gap-3 hover:z-80 focus-within:z-80 landscape:bottom-2 landscape:left-2 landscape:right-auto landscape:top-auto landscape:flex-col-reverse"
         aria-label="Game information"
       >
         <div className="pointer-events-auto">
@@ -245,6 +249,7 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
         </div>
         <div className="pointer-events-auto">
           <PlayerStuffButton
+            playerName={player.id}
             color={player.color}
             investigateCards={player.investigateCards.keptCards}
             selected={openCategory === 'player'}
@@ -267,19 +272,15 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
             aria-expanded={openCategory === 'active-card'}
             onClick={() => setOpenCategory('active-card')}
           >
-            {activeCardImage ? (
-              <img
-                src={activeCardImage.href}
-                alt="Active card"
-                className="h-full w-full object-contain"
-                style={{
-                  filter:
-                    'drop-shadow(0 0 1px #dbeafe) drop-shadow(0 0 4px #3b82f6) drop-shadow(0 6px 5px rgba(0, 0, 0, 0.95))',
-                }}
-              />
-            ) : (
-              <RectangleStackIcon className="h-8 w-8 text-white drop-shadow-lg" aria-hidden="true" />
-            )}
+            <img
+              src={(activeCardImage ?? explorerMat).href}
+              alt={activeCardImage ? 'Active card' : 'Explorer mat'}
+              className="h-full w-full object-contain"
+              style={{
+                filter:
+                  'drop-shadow(0 0 1px #dbeafe) drop-shadow(0 0 4px #3b82f6) drop-shadow(0 6px 5px rgba(0, 0, 0, 0.95))',
+              }}
+            />
             <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
               Active Card
             </span>
