@@ -33,13 +33,13 @@ export const ChangePassword = ({ className = '', onSuccess, dark = false, ...pro
         const changeResult = await changePassword(newPassword)
 
         if (changeResult.isError) {
-          return toast.error({ message: 'Trouble Changing Password 🙁', description: changeResult.error?.message })
+          return toast.error({ message: "Couldn't update your password", description: changeResult.error?.message })
         }
 
         if (changeResult.isSuccess) {
           setNewPassword('')
           setConfirmNewPassword('')
-          toast.success({ message: 'Password updated.', description: "Don't forget to save it somewhere safe." })
+          toast.success({ message: 'Password updated.' })
           onSuccess?.()
         }
       }}

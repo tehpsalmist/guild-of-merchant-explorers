@@ -348,9 +348,9 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
               : 'hidden',
             'lg:sticky lg:inset-auto lg:top-16 lg:flex lg:h-[calc(100dvh-7rem)] lg:max-h-[52rem] lg:min-h-0 lg:bg-black/35',
           )}
-          aria-labelledby="conversation-heading"
+          aria-label="Table talk"
         >
-            <header className="flex shrink-0 items-center gap-3 border-b border-amber-100/10 px-4 py-4 sm:px-5">
+            <header className="hidden shrink-0 items-center gap-3 border-b border-amber-100/10 px-5 py-4 lg:flex">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
                 <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
               </span>
@@ -367,26 +367,26 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                   {connectionLabel}
                 </p>
               </div>
-              <ExpeditionButton
-                className="ml-auto lg:hidden"
-                tone="quiet"
-                compact
-                Icon={XMarkIcon}
-                onClick={() => setMobileChatOpen(false)}
-                aria-label="Close table talk"
-              />
             </header>
 
-            <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-4 py-5 sm:px-5">
+            <button
+              className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 bg-slate-950/85 text-amber-100/60 shadow-lg backdrop-blur-sm transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 lg:hidden"
+              onClick={() => setMobileChatOpen(false)}
+              aria-label="Close table talk"
+            >
+              <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
               {chatMessages.length === 0 ? (
-                <div className="flex h-full min-h-52 flex-col items-center justify-center text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100/10 text-amber-200/70">
-                    <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
+                <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100/10 text-amber-200/70 lg:h-12 lg:w-12">
+                    <ChatBubbleLeftRightIcon className="h-5 w-5 lg:h-6 lg:w-6" aria-hidden="true" />
                   </span>
-                  <p className="mt-3 font-serif text-xl text-amber-50">
+                  <p className="mt-2 font-serif text-lg text-amber-50 lg:mt-3 lg:text-xl">
                     {canChat ? 'The conversation starts here.' : 'Waiting for company.'}
                   </p>
-                  <p className="mt-1 max-w-sm text-sm leading-6 text-amber-100/45">
+                  <p className="mt-1 hidden max-w-sm text-sm leading-6 text-amber-100/45 lg:block">
                     {canChat
                       ? 'Say hello, compare notes, or pass the time while everyone gathers.'
                       : 'Once another player accepts their invitation, you can chat right here.'}
@@ -435,7 +435,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                           )}
                           <p
                             className={clsx(
-                              'whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-left text-sm leading-6 shadow-md',
+                              'whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left text-sm leading-5 shadow-md lg:px-3.5 lg:py-2.5 lg:leading-6',
                               isMine ? 'bg-[#f5edcf] text-slate-950' : 'border border-amber-100/10 bg-white/8 text-amber-50',
                               !followedBySameSender && (isMine ? 'rounded-br-sm' : 'rounded-bl-sm'),
                             )}
@@ -450,12 +450,12 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
               )}
             </div>
 
-            <form className="shrink-0 border-t border-amber-100/10 bg-slate-950/75 p-3 sm:p-4" onSubmit={sendMessage}>
+            <form className="shrink-0 border-t border-amber-100/10 bg-slate-950/75 p-2 lg:p-4" onSubmit={sendMessage}>
               <label className="sr-only" htmlFor="chat-message">Message the table</label>
               <div className="flex items-end gap-2">
                 <textarea
                   id="chat-message"
-                  className="max-h-32 min-h-12 min-w-0 grow resize-none rounded-xl border border-amber-100/20 bg-amber-50/95 px-3 py-3 text-base text-slate-950 placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="max-h-32 min-h-10 min-w-0 grow resize-none rounded-xl border border-amber-100/20 bg-amber-50/95 px-3 py-2 text-[16px] text-slate-950 placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12 lg:py-3"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value.slice(0, 500))}
                   onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -476,8 +476,9 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                   }}
                 />
                 <ExpeditionButton
-                  className="h-12 min-h-12 w-12 px-0"
+                  className="h-10 min-h-10! w-10 px-0 lg:h-12 lg:min-h-12! lg:w-12"
                   tone="primary"
+                  compact
                   Icon={PaperAirplaneIcon}
                   type="submit"
                   disabled={!canChat || !draft.trim()}
@@ -485,7 +486,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                   title="Send message"
                 />
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3 px-1">
+              <div className="mt-2 hidden items-center justify-between gap-3 px-1 lg:flex">
                 <p className="text-[0.65rem] text-amber-100/35">
                   {canChat && connectedPeerCount < peerCount
                     ? 'Messages will send when the connection is ready.'

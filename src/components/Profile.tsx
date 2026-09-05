@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Main } from '../design-system/Main'
-import { useNhostClient, useUserData } from '@nhost/react'
-import { CheckIcon, EnvelopeIcon, IdentificationIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
+import { useNhostClient, useSignOut, useUserData } from '@nhost/react'
+import {
+  ArrowLeftStartOnRectangleIcon,
+  CheckIcon,
+  EnvelopeIcon,
+  IdentificationIcon,
+  ShieldCheckIcon,
+} from '@heroicons/react/24/outline'
 import { ChangePassword } from './ChangePassword'
 import { toast } from '@8thday/react'
 import { UPDATE_USER } from '../graphql/mutations'
@@ -13,6 +19,7 @@ export interface ProfileProps {}
 export const Profile = (_: ProfileProps) => {
   const user = useUserData()
   const nhost = useNhostClient()
+  const { signOut } = useSignOut()
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [savedDisplayName, setSavedDisplayName] = useState(user?.displayName ?? '')
   const [saving, setSaving] = useState(false)
@@ -42,11 +49,11 @@ export const Profile = (_: ProfileProps) => {
 
       <div className="relative mx-auto w-full max-w-5xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
         <header className="max-w-3xl">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.3em] text-amber-200/65">Peer account</p>
-          <h1 className="font-serif text-4xl text-amber-50 sm:text-5xl">Your Connection Profile</h1>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.3em] text-amber-200/65">Get A Room</p>
+          <h1 className="font-serif text-4xl text-amber-50 sm:text-5xl">Your profile</h1>
           <p className="mt-3 text-sm leading-6 text-amber-100/60 sm:text-base">
-            One identity for finding players and establishing peer-to-peer sessions across games that use this
-            service.
+            This is how you show up in games that use Get A Room. You can change the name other players see and manage
+            your account here.
           </p>
         </header>
 
@@ -60,11 +67,11 @@ export const Profile = (_: ProfileProps) => {
             <p className="mt-1 break-all text-sm text-amber-100/45">{user.email}</p>
             <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-100/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-amber-100/60">
               <IdentificationIcon className="h-4 w-4 text-amber-200" aria-hidden="true" />
-              Shared player identity
+              Works across supported games
             </span>
             <p className="mt-5 border-t border-amber-100/10 pt-5 text-left text-sm leading-6 text-amber-100/50">
-              Games use this profile to help players recognize one another before a direct WebRTC session begins.
-              Each game still owns its rooms, rules, and play experience.
+              Get A Room handles the introductions: it helps players meet in a room and set up a direct WebRTC
+              connection. Once you’re connected, the game takes over.
             </p>
           </aside>
 
@@ -76,10 +83,10 @@ export const Profile = (_: ProfileProps) => {
                 </span>
                 <div>
                   <h2 className="font-serif text-2xl text-amber-50" id="identity-settings-heading">
-                    Public Identity
+                    How other players see you
                   </h2>
                   <p className="mt-1 text-sm leading-5 text-amber-100/50">
-                    Your display name and avatar can appear in games and to other players using the service.
+                    Games can use your display name and avatar in their lobbies and waiting rooms.
                   </p>
                 </div>
               </div>
@@ -91,7 +98,7 @@ export const Profile = (_: ProfileProps) => {
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-100/40">Sign-in email</p>
                     <p className="mt-1 break-all text-sm font-bold text-amber-50">{user.email}</p>
                     <p className="mt-1 text-xs leading-5 text-amber-100/40">
-                      Used for account access and recovery. It is not included in game player lists.
+                      We use this to sign you in and help recover your account. Other players won’t see it.
                     </p>
                   </div>
                 </div>
@@ -111,7 +118,7 @@ export const Profile = (_: ProfileProps) => {
 
                   if (result.error) {
                     return toast.error({
-                      message: 'Trouble updating your display name',
+                      message: "Couldn't update your display name",
                       description: Array.isArray(result.error) ? result.error[0].message : result.error.message,
                     })
                   }
@@ -125,7 +132,7 @@ export const Profile = (_: ProfileProps) => {
                   Display name
                 </label>
                 <p className="mt-1 text-xs leading-5 text-amber-100/40" id="profile-display-name-description">
-                  This is the name other players will see. Use at least three characters.
+                  This is what people will see in lobbies and waiting rooms. Use at least three characters.
                 </p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
@@ -158,10 +165,10 @@ export const Profile = (_: ProfileProps) => {
                 </span>
                 <div>
                   <h2 className="font-serif text-2xl text-amber-50" id="security-settings-heading">
-                    Account Security
+                    Account security
                   </h2>
                   <p className="mt-1 text-sm leading-5 text-amber-100/50">
-                    Your password protects this account across every connected game.
+                    Change your password here whenever you need to.
                   </p>
                 </div>
               </div>
@@ -169,6 +176,21 @@ export const Profile = (_: ProfileProps) => {
             </section>
           </div>
         </div>
+
+        <footer className="mt-5 flex flex-col gap-4 border-t border-amber-100/10 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-amber-50">Finished for now?</p>
+            <p className="mt-1 text-xs text-amber-100/40">Sign out of Get A Room on this device.</p>
+          </div>
+          <ExpeditionButton
+            className="w-full text-red-100/70 sm:w-auto"
+            tone="quiet"
+            Icon={ArrowLeftStartOnRectangleIcon}
+            onClick={() => signOut()}
+          >
+            Sign out
+          </ExpeditionButton>
+        </footer>
       </div>
     </Main>
   )
