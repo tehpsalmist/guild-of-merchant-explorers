@@ -10,7 +10,7 @@ export const useHasJoined = () => {
 
   const userId = useUserId()
 
-  const { data, loading, refetch } = useAuthQuery(GET_GAME, { variables: { userId }, skip: !userId })
+  const { data, loading, refetch } = useAuthQuery(GET_GAME, { variables: { userId: userId ?? '' }, skip: !userId })
 
   const joined = !!userId && data?.game_by_pk?.players?.[0]?.player_id === userId
 
@@ -34,7 +34,10 @@ export const useHasJoined = () => {
       return
     }
 
-    const res = await nhost.graphql.request(LEAVE_GAME_PERMANENTLY, { id: data?.game_by_pk?.players?.[0]?.id })
+    const id = data?.game_by_pk?.players[0]?.id
+    if (id == null) return
+
+    const res = await nhost.graphql.request(LEAVE_GAME_PERMANENTLY, { id })
 
     if (res.error) {
       return toast.error({ message: 'Trouble Leaving Forum', description: getGraphqlErrorMessage(res.error) })

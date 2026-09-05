@@ -277,7 +277,7 @@ export class TreasureDeck extends Deck<TreasureCard> {
     } else {
       super(
         treasureCards.flatMap((c) =>
-          Array(c.count)
+          Array<number>(c.count)
             .fill(1)
             .map((n, i) => new TreasureCard({ ...c, id: `${c.type}-${i}` })),
         ),

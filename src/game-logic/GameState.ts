@@ -1110,7 +1110,7 @@ export class MoveHistory {
       }
     }
 
-    return !!(undoing as any)?.auto
+    return !!undoing && 'auto' in undoing && !!undoing.auto
   }
 
   async undoAllMoves() {

@@ -1,5 +1,6 @@
+import type { GameNotificationsQuery } from '../graphql/types.generated'
 import { useAuthQuery } from '@nhost/react-apollo'
-import React, { ComponentProps, useEffect, useState } from 'react'
+import React, { ComponentPropsWithoutRef, useEffect, useState } from 'react'
 import { GAME_NOTIFICATIONS, GET_HOSTED_ROOM_NAMES, STREAM_NOTIFICATIONS } from '../graphql/queries'
 import { useNhostClient, useUserId } from '@nhost/react'
 import { useSubscription } from '@apollo/client'
@@ -22,14 +23,9 @@ type NotificationMessage = {
   }
 }
 
-interface Notification {
-  id: number
-  ack: boolean
-  message: NotificationMessage
-  created_at: string
-}
+type Notification = GameNotificationsQuery['game_player_notification'][number]
 
-export interface NotificationsProps extends ComponentProps<'div'> {}
+export interface NotificationsProps extends ComponentPropsWithoutRef<'div'> {}
 
 export const Notifications = ({ className = '', ...props }: NotificationsProps) => {
   const nhost = useNhostClient()
@@ -37,8 +33,9 @@ export const Notifications = ({ className = '', ...props }: NotificationsProps) 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const desktopNavigation = useMediaQuery('(min-width: 640px)')
 
-  const { data, refetch } = useAuthQuery<{ game_player_notification: Notification[] }>(GAME_NOTIFICATIONS, {
-    variables: { userId },
+  const { data, refetch } = useAuthQuery(GAME_NOTIFICATIONS, {
+    variables: { userId: userId ?? '' },
+    skip: !userId,
   })
 
   useEffect(() => {
@@ -49,9 +46,9 @@ export const Notifications = ({ className = '', ...props }: NotificationsProps) 
 
   const latestId = Array.isArray(data?.game_player_notification) ? data.game_player_notification.at(-1)?.id ?? 0 : null
 
-  useSubscription<{ game_player_notification_stream: Notification[] }>(STREAM_NOTIFICATIONS, {
-    variables: { userId, latestId },
-    skip: latestId == null,
+  useSubscription(STREAM_NOTIFICATIONS, {
+    variables: { userId: userId ?? '', latestId: latestId ?? 0 },
+    skip: !userId || latestId == null,
     onData({ data }) {
       setNotifications((ns) => ns.concat(data?.data?.game_player_notification_stream ?? []).filter(removeDupes()))
     },
@@ -126,7 +123,7 @@ export const Notifications = ({ className = '', ...props }: NotificationsProps) 
 }
 
 interface NotificationMessageDisplayProps {
-  message: NotificationMessage
+  message: unknown
   id: number
   onInvite?(): void
 }
@@ -136,13 +133,15 @@ const NotificationMessageDisplay = ({ message, id, onInvite }: NotificationMessa
   const userId = useUserId()
 
   const { data } = useAuthQuery(GET_HOSTED_ROOM_NAMES, {
-    variables: { hostId: userId },
-    skip: message.type !== 'request-to-join-room',
+    variables: { hostId: userId ?? '' },
+    skip: !userId || !isNotificationMessage(message),
   })
 
   const { userLookup } = usePlayerList()
 
-  const names = data?.room?.reduce((map, room) => ({ ...map, [room.id]: room.name }), {})
+  const names = data?.room?.reduce<Record<number, string | null>>((map, room) => ({ ...map, [room.id]: room.name }), {})
+
+  if (!isNotificationMessage(message)) return null
 
   switch (message.type) {
     case 'request-to-join-room':
@@ -193,13 +192,22 @@ const NotificationMessageDisplay = ({ message, id, onInvite }: NotificationMessa
 }
 
 const removeDupes = () => {
-  const exists = new Map()
+  const exists = new Map<number, boolean>()
 
-  return (notification) => {
+  return (notification: Notification) => {
     if (exists.has(notification.id)) return false
 
     exists.set(notification.id, true)
 
     return true
   }
+}
+
+function isNotificationMessage(value: unknown): value is NotificationMessage {
+  if (!value || typeof value !== 'object' || !('type' in value) || !('data' in value)) return false
+  if (value.type !== 'request-to-join-room') return false
+  const data = value.data
+  return !!data && typeof data === 'object' &&
+    'userId' in data && typeof data.userId === 'string' &&
+    'roomId' in data && typeof data.roomId === 'number' && Number.isInteger(data.roomId)
 }

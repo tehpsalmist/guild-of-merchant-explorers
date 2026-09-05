@@ -1,7 +1,7 @@
 import React, { ReactNode, createContext, useContext, useMemo } from 'react'
-import { BoardName, GameState, PlayerInputs } from '../game-logic/GameState'
+import { BoardName, GameState, PlayerInputs, SerializedGameState } from '../game-logic/GameState'
 
-const GameStateContext = createContext<{ resetGame(): void; gameState: GameState }>({} as any)
+const GameStateContext = createContext<{ resetGame(): void; gameState: GameState } | null>(null)
 
 export interface GameStateProviderProps {
   children: ReactNode
@@ -16,7 +16,8 @@ export const GameStateProvider = ({ children, name, playerData, resetGame }: Gam
 
     if (savedState) {
       try {
-        const parsedState = JSON.parse(savedState)
+        // Saved locally by GameState.toJSON; restoration failures fall back to a new game.
+        const parsedState = JSON.parse(savedState) as SerializedGameState
         console.log(parsedState)
         const restoredGameState = new GameState({ boardName: parsedState.boardName }, parsedState)
         restoredGameState.players.forEach((p) => p.replayMoves())
@@ -38,4 +39,8 @@ export const GameStateProvider = ({ children, name, playerData, resetGame }: Gam
   return <GameStateContext.Provider value={{ gameState, resetGame }}>{children}</GameStateContext.Provider>
 }
 
-export const useGameState = () => useContext(GameStateContext)
+export const useGameState = () => {
+  const context = useContext(GameStateContext)
+  if (!context) throw new Error('useGameState requires a GameStateProvider')
+  return context
+}

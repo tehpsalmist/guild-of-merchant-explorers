@@ -1,3 +1,4 @@
+import type { GetRoomsSubscription } from '../graphql/types.generated'
 import React, { ComponentProps, ReactNode, useState } from 'react'
 import { Main } from '../design-system/Main'
 import { useAuthSubscription } from '@nhost/react-apollo'
@@ -28,19 +29,9 @@ import {
   expeditionButtonClasses,
 } from '../design-system/ExpeditionButton'
 
-interface RoomMember {
-  id: number
-  player_id: string
-  invite_accepted: boolean
-}
+type RoomMember = Room['members'][number]
 
-interface Room {
-  id: number
-  name: string
-  host_id: string
-  is_public: boolean
-  members: RoomMember[]
-}
+type Room = GetRoomsSubscription['room'][number]
 
 export interface LobbyProps extends ComponentProps<'div'> {}
 
@@ -173,7 +164,7 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
                             Icon={ArrowLeftStartOnRectangleIcon}
                             aria-label={`Leave ${room.name}`}
                             title={`Leave ${room.name}`}
-                            onClick={() => removeMembership(nhost, membership, room.name)}
+                            onClick={() => membership && removeMembership(nhost, membership, room.name ?? 'table')}
                           />
                         </>
                       ) : (
@@ -181,14 +172,14 @@ export const Lobby = ({ className = '', ...props }: LobbyProps) => {
                           <ExpeditionButton
                             tone="primary"
                             Icon={CheckIcon}
-                            onClick={() => acceptInvitation(nhost, membership, room.name)}
+                            onClick={() => membership && acceptInvitation(nhost, membership, room.name ?? 'table')}
                           >
                             Accept
                           </ExpeditionButton>
                           <ExpeditionButton
                             tone="danger"
                             Icon={XMarkIcon}
-                            onClick={() => removeMembership(nhost, membership, room.name)}
+                            onClick={() => membership && removeMembership(nhost, membership, room.name ?? 'table')}
                           >
                             Decline
                           </ExpeditionButton>

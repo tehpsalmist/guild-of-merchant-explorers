@@ -1,10 +1,7 @@
-import { ErrorPayload } from '@nhost/react'
-import { GraphQLError } from 'graphql'
-
-export const getGraphqlErrorMessage = (e: ErrorPayload | GraphQLError[]) => {
-  if (Array.isArray(e)) {
-    return e[0]?.message
+export const getGraphqlErrorMessage = (error: unknown): string | undefined => {
+  const first: unknown = Array.isArray(error) ? error[0] : error
+  if (first && typeof first === 'object' && 'message' in first && typeof first.message === 'string') {
+    return first.message
   }
-
-  return e.message
+  return undefined
 }

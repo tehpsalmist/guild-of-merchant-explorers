@@ -5,16 +5,28 @@ import SimplePeer, { SignalData } from 'simple-peer'
 import { SEND_P2P_MESSAGE } from '../graphql/mutations'
 import { LATEST_P2P_MESSAGE, P2P_MESSAGE_STREAM } from '../graphql/queries'
 
-type PeerState = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+export type PeerState = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+
+export interface PeerMessage<T = unknown> {
+  id: string
+  type: string
+  data: T
+}
 
 type SignalingMessage =
+  | { type: 'probe'; senderSessionId: string }
+  | { type: 'ready'; senderSessionId: string; nonce: string }
+  | { type: 'start'; senderSessionId: string; sessionId: string }
+  | { type: 'signal'; senderSessionId: string; sessionId: string; data: SignalData }
+
+type OutgoingSignalingMessage =
   | { type: 'probe' }
   | { type: 'ready'; nonce: string }
   | { type: 'start'; sessionId: string }
   | { type: 'signal'; sessionId: string; data: SignalData }
 
 type PeerEvents = {
-  message: [string]
+  message: [PeerMessage]
   stream: [MediaStream]
   'handshake-state': [PeerState]
 }
@@ -42,27 +54,29 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
     readonly myId: number,
     readonly memberId: number,
     readonly roomId: number,
+    readonly roomSessionId: string,
     nhost: NhostClient,
-    apollo: ApolloClient<any>,
+    apollo: ApolloClient<object>,
   ) {
     super()
 
     this.isInitiator = myId < memberId
-    this.serverConnection = new ServerConnection(nhost, apollo, myId, memberId, roomId)
+    this.serverConnection = new ServerConnection(nhost, apollo, myId, memberId, roomId, roomSessionId)
     this.serverConnection.on('message', (message) => this.handleServerMessage(message))
-    this.serverConnection.on('error', (error) => this.handleFailure(error))
+    this.serverConnection.on('error', (error: unknown) => this.handleFailure(error))
 
     this.connectToCoordinator()
   }
 
-  sendMessage(message: string) {
+  sendMessage(message: PeerMessage) {
+    const serializedMessage = JSON.stringify(message)
     if (!this.peer?.connected) {
-      this.pendingMessages.push(message)
+      this.pendingMessages.push(serializedMessage)
       this.pendingMessages = this.pendingMessages.slice(-50)
       return false
     }
 
-    this.peer.send(message)
+    this.peer.send(serializedMessage)
     return true
   }
 
@@ -105,7 +119,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
 
     switch (message.type) {
       case 'probe':
-        if (!this.isInitiator) this.announceReady(false).catch((error) => this.handleFailure(error))
+        if (!this.isInitiator) this.announceReady(false).catch((error: unknown) => this.handleFailure(error))
         break
       case 'ready':
         if (this.isInitiator && message.nonce !== this.lastReadyNonce) {
@@ -169,7 +183,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
       if (peer !== this.peer || !this.sessionId) return
       this.serverConnection
         .send({ type: 'signal', sessionId: this.sessionId, data })
-        .catch((error) => this.handleFailure(error))
+        .catch((error: unknown) => this.handleFailure(error))
     })
 
     peer.on('connect', () => {
@@ -188,12 +202,14 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
       }
     })
 
-    peer.on('data', (data) => {
+    peer.on('data', (data: unknown) => {
       if (peer !== this.peer) return
 
       try {
-        const message = JSON.parse(data.toString())
-        if (message.type === 'text-message' && typeof message.data === 'string') this.emit('message', message.data)
+        if (typeof data !== 'string' && !(data instanceof Uint8Array)) return
+        const serialized = typeof data === 'string' ? data : new TextDecoder().decode(data)
+        const message: unknown = JSON.parse(serialized)
+        if (isPeerMessage(message)) this.emit('message', message)
       } catch {
         // Ignore data that does not use this application's message format.
       }
@@ -203,7 +219,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
       if (peer === this.peer) this.emit('stream', stream)
     })
 
-    peer.on('error', (error) => {
+    peer.on('error', (error: unknown) => {
       if (peer === this.peer) this.handleFailure(error)
     })
 
@@ -256,10 +272,11 @@ class ServerConnection extends EventEmitter<ServerEvents> {
 
   constructor(
     private readonly nhost: NhostClient,
-    private readonly apollo: ApolloClient<any>,
+    private readonly apollo: ApolloClient<object>,
     private readonly myId: number,
     private readonly memberId: number,
     private readonly roomId: number,
+    private readonly roomSessionId: string,
   ) {
     super()
   }
@@ -275,12 +292,12 @@ class ServerConnection extends EventEmitter<ServerEvents> {
     return this.connectPromise
   }
 
-  send(message: SignalingMessage) {
+  send(message: OutgoingSignalingMessage) {
     const request = this.sendQueue.then(async () => {
       if (this.destroyed) throw new Error('Signaling connection is closed')
 
       const { error } = await this.nhost.graphql.request(SEND_P2P_MESSAGE, {
-        message,
+        message: { ...message, senderSessionId: this.roomSessionId },
         senderId: this.myId,
         receiverId: this.memberId,
         roomId: this.roomId,
@@ -326,7 +343,7 @@ class ServerConnection extends EventEmitter<ServerEvents> {
             if (isSignalingMessage(row.message)) this.emit('message', row.message)
           }
         },
-        error: (subscriptionError) => {
+        error: (subscriptionError: unknown) => {
           this.subscription = undefined
           this.emit('error', toError(subscriptionError))
         },
@@ -337,6 +354,8 @@ class ServerConnection extends EventEmitter<ServerEvents> {
 function isSignalingMessage(value: unknown): value is SignalingMessage {
   if (!value || typeof value !== 'object' || !('type' in value)) return false
   const message = value as Record<string, unknown>
+
+  if (typeof message.senderSessionId !== 'string') return false
 
   switch (message.type) {
     case 'probe':
@@ -350,6 +369,12 @@ function isSignalingMessage(value: unknown): value is SignalingMessage {
     default:
       return false
   }
+}
+
+function isPeerMessage(value: unknown): value is PeerMessage {
+  if (!value || typeof value !== 'object') return false
+  const message = value as Record<string, unknown>
+  return typeof message.id === 'string' && typeof message.type === 'string' && 'data' in message
 }
 
 function toError(error: unknown) {

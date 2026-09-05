@@ -16,7 +16,7 @@ import {
   UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { P2PRoom } from '../p2p-connection/p2p-room'
+import { P2PRoom, RoomSessionError } from '../p2p-connection/p2p-room'
 import { useNhostClient, useUserId } from '@nhost/react'
 import { useApolloClient } from '@apollo/client'
 import clsx from 'clsx'
@@ -39,6 +39,8 @@ export interface GameRoomProps extends ComponentProps<'main'> {}
 
 export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const [p2pRoom, setP2PRoom] = useState<P2PRoom>()
+  const [sessionError, setSessionError] = useState<string>()
+  const [sessionRetry, setSessionRetry] = useState(0)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [peerStates, setPeerStates] = useState<Record<number, PeerState>>({})
@@ -116,10 +118,32 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   useEffect(() => {
     if (!room || !userId) return
 
-    const nextRoom = new P2PRoom(room, userId, nhost, apollo)
-    setP2PRoom(nextRoom)
-    return () => nextRoom.destroy()
-  }, [room, userId, nhost, apollo])
+    let nextRoom: P2PRoom | undefined
+    let cancelled = false
+    setP2PRoom(undefined)
+    setSessionError(undefined)
+
+    void P2PRoom.connect(room, userId, nhost, apollo)
+      .then((connectedRoom) => {
+        if (cancelled) return connectedRoom.destroy()
+        nextRoom = connectedRoom
+        setP2PRoom(connectedRoom)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSessionError(error instanceof RoomSessionError ? error.message : 'Unable to connect to this room.')
+        }
+      })
+
+    return () => {
+      cancelled = true
+      nextRoom?.destroy()
+    }
+  }, [room?.id, userId, nhost, apollo, sessionRetry])
+
+  useEffect(() => {
+    if (p2pRoom && room?.members) p2pRoom.syncMembers(room.members)
+  }, [p2pRoom, room?.members])
 
   useEffect(() => {
     if (!p2pRoom) return
@@ -130,24 +154,22 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
         setUnreadCount((count) => Math.min(count + 1, 99))
       }
     })
-    const stateCleanups = [...p2pRoom.connections.entries()].map(([memberId, connection]) => {
-      const updateState = (state: PeerState) => {
-        setPeerStates((states) => ({ ...states, [memberId]: state }))
-      }
-      updateState(connection.handshakeState)
-      connection.on('handshake-state', updateState)
-      return () => connection.off('handshake-state', updateState)
-    })
+    const updateState = ({ memberId, state }: { memberId: number; state: PeerState }) => {
+      setPeerStates((states) => ({ ...states, [memberId]: state }))
+    }
+    const loseSession = (reason: string) => {
+      setSessionError(reason)
+      setP2PRoom(undefined)
+    }
+    p2pRoom.on('peer-state', updateState)
+    p2pRoom.on('session-lost', loseSession)
 
-    setPeerStates(
-      Object.fromEntries(
-        [...p2pRoom.connections.entries()].map(([memberId, connection]) => [memberId, connection.handshakeState]),
-      ),
-    )
+    setPeerStates(Object.fromEntries(p2pRoom.getPeers().map(({ memberId, state }) => [memberId, state])))
 
     return () => {
       messageCleanup()
-      stateCleanups.forEach((cleanup) => cleanup())
+      p2pRoom.off('peer-state', updateState)
+      p2pRoom.off('session-lost', loseSession)
     }
   }, [p2pRoom])
 
@@ -185,19 +207,13 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     if (!message || !p2pRoom || !currentMember || !canChat) return
 
     p2pRoom.sendMessages(JSON.stringify({ type: 'text-message', data: message }))
-    setChatMessages((currentMessages) => [
-      ...currentMessages,
-      { id: currentMember.id, message, sentAt: new Date() },
-    ])
+    setChatMessages((currentMessages) => [...currentMessages, { id: currentMember.id, message, sentAt: new Date() }])
     setDraft('')
   }
 
   return (
     <Main
-      className={clsx(
-        className,
-        'relative bg-slate-950 text-amber-50 selection:bg-amber-200 selection:text-slate-950',
-      )}
+      className={clsx(className, 'relative bg-slate-950 text-amber-50 selection:bg-amber-200 selection:text-slate-950')}
       {...props}
     >
       <div
@@ -212,59 +228,73 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
       <div className="relative mx-auto grid min-h-[calc(100dvh-3rem)] w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:px-8">
         <div className="flex min-w-0 flex-col gap-5 lg:min-h-[calc(100dvh-7rem)]">
           <header className="flex flex-col gap-4 rounded-2xl border border-amber-100/15 bg-black/25 p-4 shadow-xl backdrop-blur-sm sm:p-5">
-          <div className="flex min-w-0 items-start gap-3">
-            <NavLink
-              className={clsx(expeditionButtonClasses({ tone: 'quiet', compact: true }), '-ml-2')}
-              to="../lobby"
-              aria-label="Back to lobby"
-              title="Back to lobby"
-            >
-              <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
-            </NavLink>
-            <div className="min-w-0 grow">
-              <p className="text-[0.65rem] font-bold uppercase tracking-[0.26em] text-amber-100/50">
-                Waiting room
-              </p>
-              <h1 className="truncate font-serif text-3xl text-amber-50 sm:text-4xl">{room.name}</h1>
-              <p className="mt-1 text-sm text-amber-100/55">Settle in and talk while the rest of the table arrives.</p>
-            </div>
-            <span className="hidden items-center gap-1.5 rounded-full border border-amber-100/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-amber-100/60 sm:inline-flex">
-              {room.is_public ? (
-                <GlobeAltIcon className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <LockClosedIcon className="h-4 w-4" aria-hidden="true" />
-              )}
-              {room.is_public ? 'Public' : 'Private'}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-amber-100/10 pt-4 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <div className="flex -space-x-2" aria-hidden="true">
-                {acceptedMembers.slice(0, 4).map((member) => (
-                  <Avatar
-                    key={member.id}
-                    className="h-8 w-8 border-2 border-slate-950 bg-amber-50/10"
-                    avatarUrl={userLookup[member.player_id]?.avatarUrl}
-                  />
-                ))}
+            <div className="flex min-w-0 items-start gap-3">
+              <NavLink
+                className={clsx(expeditionButtonClasses({ tone: 'quiet', compact: true }), '-ml-2')}
+                to="../lobby"
+                aria-label="Back to lobby"
+                title="Back to lobby"
+              >
+                <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
+              </NavLink>
+              <div className="min-w-0 grow">
+                <p className="text-[0.65rem] font-bold uppercase tracking-[0.26em] text-amber-100/50">Waiting room</p>
+                <h1 className="truncate font-serif text-3xl text-amber-50 sm:text-4xl">{room.name}</h1>
+                <p className="mt-1 text-sm text-amber-100/55">
+                  Settle in and talk while the rest of the table arrives.
+                </p>
               </div>
-              <p className="text-sm text-amber-100/60">
-                <strong className="text-amber-50">{acceptedMembers.length}</strong> of {room.members.length}{' '}
-                {room.members.length === 1 ? 'player' : 'players'} ready
-              </p>
+              <span className="hidden items-center gap-1.5 rounded-full border border-amber-100/15 bg-white/5 px-3 py-1.5 text-xs font-bold text-amber-100/60 sm:inline-flex">
+                {room.is_public ? (
+                  <GlobeAltIcon className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <LockClosedIcon className="h-4 w-4" aria-hidden="true" />
+                )}
+                {room.is_public ? 'Public' : 'Private'}
+              </span>
             </div>
-            {isHost && <HostControls className="sm:ml-auto" room={room} showLabels showClose={false} />}
-          </div>
+
+            <div className="flex flex-col gap-3 border-t border-amber-100/10 pt-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-2" aria-hidden="true">
+                  {acceptedMembers.slice(0, 4).map((member) => (
+                    <Avatar
+                      key={member.id}
+                      className="h-8 w-8 border-2 border-slate-950 bg-amber-50/10"
+                      avatarUrl={userLookup[member.player_id]?.avatarUrl}
+                    />
+                  ))}
+                </div>
+                <p className="text-sm text-amber-100/60">
+                  <strong className="text-amber-50">{acceptedMembers.length}</strong> of {room.members.length}{' '}
+                  {room.members.length === 1 ? 'player' : 'players'} ready
+                </p>
+              </div>
+              {isHost && <HostControls className="sm:ml-auto" room={room} showLabels showClose={false} />}
+            </div>
           </header>
 
-          <section className="self-start rounded-2xl border border-amber-100/15 bg-black/25 p-4 shadow-xl backdrop-blur-sm sm:p-5" aria-labelledby="players-heading">
+          {sessionError && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/30 bg-amber-950/40 p-4 text-sm text-amber-50 sm:flex-row sm:items-center">
+              <p className="grow">{sessionError}</p>
+              <ExpeditionButton tone="quiet" onClick={() => setSessionRetry((attempt) => attempt + 1)}>
+                Try again
+              </ExpeditionButton>
+            </div>
+          )}
+
+          <section
+            className="self-start rounded-2xl border border-amber-100/15 bg-black/25 p-4 shadow-xl backdrop-blur-sm sm:p-5"
+            aria-labelledby="players-heading"
+          >
             <div className="mb-4 flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
                 <UserGroupIcon className="h-6 w-6" aria-hidden="true" />
               </span>
               <div>
-                <h2 className="font-serif text-2xl text-amber-50" id="players-heading">Explorers</h2>
+                <h2 className="font-serif text-2xl text-amber-50" id="players-heading">
+                  Explorers
+                </h2>
                 <p className="text-xs text-amber-100/45">Everyone invited to this table</p>
               </div>
             </div>
@@ -297,7 +327,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                     </div>
                     <div className="min-w-0 grow">
                       <p className="truncate text-sm font-bold text-amber-50">
-                        {player?.displayName ?? 'Explorer'} {isCurrentUser && <span className="text-amber-100/45">(you)</span>}
+                        {player?.displayName ?? 'Explorer'}{' '}
+                        {isCurrentUser && <span className="text-amber-100/45">(you)</span>}
                       </p>
                       <p className="text-xs text-amber-100/45">
                         {isMemberHost ? 'Host' : member.invite_accepted ? 'Ready and waiting' : 'Invitation pending'}
@@ -342,159 +373,169 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
           ref={chatPanelRef}
           id="table-talk-panel"
           className={clsx(
-            'z-30 h-[var(--chat-panel-height,min(72dvh,38rem))] max-h-[calc(100dvh-5rem)] flex-col overflow-hidden rounded-2xl border border-amber-100/20 bg-slate-950/95 shadow-2xl backdrop-blur-md',
+            'z-30 h-(--chat-panel-height,min(72dvh,38rem)) max-h-[calc(100dvh-5rem)] flex-col overflow-hidden rounded-2xl border border-amber-100/20 bg-slate-950/95 shadow-2xl backdrop-blur-md',
             mobileChatOpen
               ? 'fixed inset-x-3 bottom-[calc(var(--chat-keyboard-offset,0px)+4rem+env(safe-area-inset-bottom))] flex'
               : 'hidden',
-            'lg:sticky lg:inset-auto lg:top-16 lg:flex lg:h-[calc(100dvh-7rem)] lg:max-h-[52rem] lg:min-h-0 lg:bg-black/35',
+            'lg:sticky lg:inset-auto lg:top-16 lg:flex lg:h-[calc(100dvh-7rem)] lg:max-h-208 lg:min-h-0 lg:bg-black/35',
           )}
           aria-label="Table talk"
         >
-            <header className="hidden shrink-0 items-center gap-3 border-b border-amber-100/10 px-5 py-4 lg:flex">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
-                <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="font-serif text-2xl text-amber-50" id="conversation-heading">Table Talk</h2>
-                <p className="flex items-center gap-1.5 text-xs text-amber-100/45">
-                  <span
-                    className={clsx(
-                      'h-2 w-2 shrink-0 rounded-full',
-                      connectedPeerCount === peerCount && peerCount > 0 ? 'bg-emerald-400' : 'bg-amber-400',
-                    )}
-                    aria-hidden="true"
-                  />
-                  {connectionLabel}
-                </p>
-              </div>
-            </header>
-
-            <button
-              className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 bg-slate-950/85 text-amber-100/60 shadow-lg backdrop-blur-sm transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 lg:hidden"
-              onClick={() => setMobileChatOpen(false)}
-              aria-label="Close table talk"
-            >
-              <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-            </button>
-
-            <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
-              {chatMessages.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100/10 text-amber-200/70 lg:h-12 lg:w-12">
-                    <ChatBubbleLeftRightIcon className="h-5 w-5 lg:h-6 lg:w-6" aria-hidden="true" />
-                  </span>
-                  <p className="mt-2 font-serif text-lg text-amber-50 lg:mt-3 lg:text-xl">
-                    {canChat ? 'The conversation starts here.' : 'Waiting for company.'}
-                  </p>
-                  <p className="mt-1 hidden max-w-sm text-sm leading-6 text-amber-100/45 lg:block">
-                    {canChat
-                      ? 'Say hello, compare notes, or pass the time while everyone gathers.'
-                      : 'Once another player accepts their invitation, you can chat right here.'}
-                  </p>
-                </div>
-              ) : (
-                <ol aria-live="polite" aria-label="Conversation messages">
-                  {chatMessages.map((chatMessage, index) => {
-                    const previousMessage = chatMessages[index - 1]
-                    const nextMessage = chatMessages[index + 1]
-                    const followsSameSender =
-                      previousMessage?.id === chatMessage.id &&
-                      chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
-                    const followedBySameSender =
-                      nextMessage?.id === chatMessage.id &&
-                      nextMessage.sentAt.getTime() - chatMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
-                    const showTimestamp =
-                      !previousMessage ||
-                      chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() >= MESSAGE_GROUP_WINDOW_MS
-                    const isMine = chatMessage.id === currentMember?.id
-                    const playerId = memberUserIdLookup[chatMessage.id]
-                    const player = userLookup[playerId]
-
-                    return (
-                      <li
-                        key={`${chatMessage.id}-${chatMessage.sentAt.getTime()}-${index}`}
-                        className={clsx('flex', index > 0 && (followsSameSender ? 'mt-1.5' : 'mt-4'), isMine && 'justify-end')}
-                      >
-                        <div className={clsx('max-w-[88%] sm:max-w-[75%]', isMine && 'text-right')}>
-                          {(!followsSameSender || showTimestamp) && (
-                            <div className="mb-1 flex items-baseline gap-2 px-1">
-                              {!followsSameSender && (
-                                <span className="truncate text-xs font-bold text-amber-100/60">
-                                  {isMine ? 'You' : player?.displayName ?? 'Explorer'}
-                                </span>
-                              )}
-                              {showTimestamp && (
-                                <time
-                                  className="text-[0.65rem] text-amber-100/30"
-                                  dateTime={chatMessage.sentAt.toISOString()}
-                                >
-                                  {formatMessageTime(chatMessage.sentAt)}
-                                </time>
-                              )}
-                            </div>
-                          )}
-                          <p
-                            className={clsx(
-                              'whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-left text-sm leading-5 shadow-md lg:px-3.5 lg:py-2.5 lg:leading-6',
-                              isMine ? 'bg-[#f5edcf] text-slate-950' : 'border border-amber-100/10 bg-white/8 text-amber-50',
-                              !followedBySameSender && (isMine ? 'rounded-br-sm' : 'rounded-bl-sm'),
-                            )}
-                          >
-                            {chatMessage.message}
-                          </p>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ol>
-              )}
+          <header className="hidden shrink-0 items-center gap-3 border-b border-amber-100/10 px-5 py-4 lg:flex">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
+              <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-serif text-2xl text-amber-50" id="conversation-heading">
+                Table Talk
+              </h2>
+              <p className="flex items-center gap-1.5 text-xs text-amber-100/45">
+                <span
+                  className={clsx(
+                    'h-2 w-2 shrink-0 rounded-full',
+                    connectedPeerCount === peerCount && peerCount > 0 ? 'bg-emerald-400' : 'bg-amber-400',
+                  )}
+                  aria-hidden="true"
+                />
+                {connectionLabel}
+              </p>
             </div>
+          </header>
 
-            <form className="shrink-0 border-t border-amber-100/10 bg-slate-950/75 p-2 lg:p-4" onSubmit={sendMessage}>
-              <label className="sr-only" htmlFor="chat-message">Message the table</label>
-              <div className="flex items-end gap-2">
-                <textarea
-                  id="chat-message"
-                  className="max-h-32 min-h-10 min-w-0 grow resize-none rounded-xl border border-amber-100/20 bg-amber-50/95 px-3 py-2 text-[16px] text-slate-950 placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12 lg:py-3"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value.slice(0, 500))}
-                  onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault()
-                      sendMessage()
-                    }
-                  }}
-                  placeholder={canChat ? 'Message the table…' : 'Waiting for another player…'}
-                  rows={1}
-                  maxLength={500}
-                  disabled={!canChat}
-                  inputMode="text"
-                  enterKeyHint="send"
-                  onFocus={(event) => {
-                    const input = event.currentTarget
-                    window.setTimeout(() => input.scrollIntoView({ block: 'nearest' }), 250)
-                  }}
-                />
-                <ExpeditionButton
-                  className="h-10 min-h-10! w-10 px-0 lg:h-12 lg:min-h-12! lg:w-12"
-                  tone="primary"
-                  compact
-                  Icon={PaperAirplaneIcon}
-                  type="submit"
-                  disabled={!canChat || !draft.trim()}
-                  aria-label="Send message"
-                  title="Send message"
-                />
-              </div>
-              <div className="mt-2 hidden items-center justify-between gap-3 px-1 lg:flex">
-                <p className="text-[0.65rem] text-amber-100/35">
-                  {canChat && connectedPeerCount < peerCount
-                    ? 'Messages will send when the connection is ready.'
-                    : 'Enter to send · Shift + Enter for a new line'}
+          <button
+            className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 bg-slate-950/85 text-amber-100/60 shadow-lg backdrop-blur-sm transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 lg:hidden"
+            onClick={() => setMobileChatOpen(false)}
+            aria-label="Close table talk"
+          >
+            <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+          </button>
+
+          <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
+            {chatMessages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100/10 text-amber-200/70 lg:h-12 lg:w-12">
+                  <ChatBubbleLeftRightIcon className="h-5 w-5 lg:h-6 lg:w-6" aria-hidden="true" />
+                </span>
+                <p className="mt-2 font-serif text-lg text-amber-50 lg:mt-3 lg:text-xl">
+                  {canChat ? 'The conversation starts here.' : 'Waiting for company.'}
                 </p>
-                {draft.length > 400 && <span className="text-[0.65rem] text-amber-100/35">{draft.length}/500</span>}
+                <p className="mt-1 hidden max-w-sm text-sm leading-6 text-amber-100/45 lg:block">
+                  {canChat
+                    ? 'Say hello, compare notes, or pass the time while everyone gathers.'
+                    : 'Once another player accepts their invitation, you can chat right here.'}
+                </p>
               </div>
-            </form>
+            ) : (
+              <ol aria-live="polite" aria-label="Conversation messages">
+                {chatMessages.map((chatMessage, index) => {
+                  const previousMessage = chatMessages[index - 1]
+                  const nextMessage = chatMessages[index + 1]
+                  const followsSameSender =
+                    previousMessage?.id === chatMessage.id &&
+                    chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
+                  const followedBySameSender =
+                    nextMessage?.id === chatMessage.id &&
+                    nextMessage.sentAt.getTime() - chatMessage.sentAt.getTime() < MESSAGE_GROUP_WINDOW_MS
+                  const showTimestamp =
+                    !previousMessage ||
+                    chatMessage.sentAt.getTime() - previousMessage.sentAt.getTime() >= MESSAGE_GROUP_WINDOW_MS
+                  const isMine = chatMessage.id === currentMember?.id
+                  const playerId = memberUserIdLookup[chatMessage.id]
+                  const player = userLookup[playerId]
+
+                  return (
+                    <li
+                      key={`${chatMessage.id}-${chatMessage.sentAt.getTime()}-${index}`}
+                      className={clsx(
+                        'flex',
+                        index > 0 && (followsSameSender ? 'mt-1.5' : 'mt-4'),
+                        isMine && 'justify-end',
+                      )}
+                    >
+                      <div className={clsx('max-w-[88%] sm:max-w-[75%]', isMine && 'text-right')}>
+                        {(!followsSameSender || showTimestamp) && (
+                          <div className="mb-1 flex items-baseline gap-2 px-1">
+                            {!followsSameSender && (
+                              <span className="truncate text-xs font-bold text-amber-100/60">
+                                {isMine ? 'You' : (player?.displayName ?? 'Explorer')}
+                              </span>
+                            )}
+                            {showTimestamp && (
+                              <time
+                                className="text-[0.65rem] text-amber-100/30"
+                                dateTime={chatMessage.sentAt.toISOString()}
+                              >
+                                {formatMessageTime(chatMessage.sentAt)}
+                              </time>
+                            )}
+                          </div>
+                        )}
+                        <p
+                          className={clsx(
+                            'whitespace-pre-wrap wrap-break-word rounded-2xl px-3 py-2 text-left text-sm leading-5 shadow-md lg:px-3.5 lg:py-2.5 lg:leading-6',
+                            isMine
+                              ? 'bg-[#f5edcf] text-slate-950'
+                              : 'border border-amber-100/10 bg-white/8 text-amber-50',
+                            !followedBySameSender && (isMine ? 'rounded-br-sm' : 'rounded-bl-sm'),
+                          )}
+                        >
+                          {chatMessage.message}
+                        </p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+          </div>
+
+          <form className="shrink-0 border-t border-amber-100/10 bg-slate-950/75 p-2 lg:p-4" onSubmit={sendMessage}>
+            <label className="sr-only" htmlFor="chat-message">
+              Message the table
+            </label>
+            <div className="flex items-end gap-2">
+              <textarea
+                id="chat-message"
+                className="max-h-32 min-h-10 min-w-0 grow resize-none rounded-xl border border-amber-100/20 bg-amber-50/95 px-3 py-2 text-[16px] text-slate-950 placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12 lg:py-3"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value.slice(0, 500))}
+                onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    sendMessage()
+                  }
+                }}
+                placeholder={canChat ? 'Message the table…' : 'Waiting for another player…'}
+                rows={1}
+                maxLength={500}
+                disabled={!canChat}
+                inputMode="text"
+                enterKeyHint="send"
+                onFocus={(event) => {
+                  const input = event.currentTarget
+                  window.setTimeout(() => input.scrollIntoView({ block: 'nearest' }), 250)
+                }}
+              />
+              <ExpeditionButton
+                className="h-10 min-h-10! w-10 px-0 lg:h-12 lg:min-h-12! lg:w-12"
+                tone="primary"
+                compact
+                Icon={PaperAirplaneIcon}
+                type="submit"
+                disabled={!canChat || !draft.trim()}
+                aria-label="Send message"
+                title="Send message"
+              />
+            </div>
+            <div className="mt-2 hidden items-center justify-between gap-3 px-1 lg:flex">
+              <p className="text-[0.65rem] text-amber-100/35">
+                {canChat && connectedPeerCount < peerCount
+                  ? 'Messages will send when the connection is ready.'
+                  : 'Enter to send · Shift + Enter for a new line'}
+              </p>
+              {draft.length > 400 && <span className="text-[0.65rem] text-amber-100/35">{draft.length}/500</span>}
+            </div>
+          </form>
         </section>
 
         {mobileChatOpen && (

@@ -1,3 +1,4 @@
+import type { GetRoomsSubscription } from '../graphql/types.generated'
 import { useNhostClient } from '@nhost/react'
 import React, { ComponentProps, useState } from 'react'
 import { Modal, toast } from '@8thday/react'
@@ -10,7 +11,7 @@ import { Avatar } from './Avatar'
 import { ExpeditionButton } from '../design-system/ExpeditionButton'
 
 export interface HostControlsProps extends ComponentProps<'div'> {
-  room: any
+  room: GetRoomsSubscription['room'][number]
   showLabels?: boolean
   showClose?: boolean
 }

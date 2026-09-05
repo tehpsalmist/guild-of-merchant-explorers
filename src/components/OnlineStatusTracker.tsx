@@ -19,6 +19,7 @@ const TrackStatus = () => {
   const userId = useUserId()
 
   useInterval(() => {
+    if (!userId) return
     nhost.graphql.request(UPDATE_USER, { userId, set: { lastSeen: 'now()' } })
   }, 30000)
 
