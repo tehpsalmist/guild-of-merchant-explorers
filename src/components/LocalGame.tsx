@@ -3,23 +3,14 @@ import { BoardName, PlayerInputs } from '../game-logic/GameState'
 import { GameStateProvider } from '../hooks/useGameState'
 import { GameBoard } from './GameBoard'
 import { TextInput, useRememberedState } from '@8thday/react'
-import { aghonBoard, aveniaBoard, cnidariaBoard, kazanBoard, northProyliaBoard, xawskilBaseBoard } from '../images'
 import clsx from 'clsx'
-import { CheckIcon, MapIcon, PlayIcon, PlusIcon, UserGroupIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { MapIcon, PlayIcon, PlusIcon, UserGroupIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ColorPicker } from './ColorPicker'
 import { Main } from '../design-system/Main'
 import { useGameNavigation } from '../hooks/useGameNavigation'
+import { BoardSelectionCards, boards } from './BoardSelectionCards'
 
 export interface LocalGameProps extends ComponentProps<'main'> {}
-
-const boards: Array<{ name: BoardName; label: string; image: URL }> = [
-  { name: 'aghon', label: 'Aghon', image: aghonBoard },
-  { name: 'avenia', label: 'Avenia', image: aveniaBoard },
-  { name: 'kazan', label: 'Kazan', image: kazanBoard },
-  { name: 'cnidaria', label: 'Cnidaria', image: cnidariaBoard },
-  { name: 'northProylia', label: 'North Proylia', image: northProyliaBoard },
-  { name: 'xawskil', label: 'Xawskil', image: xawskilBaseBoard },
-]
 
 export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
   const setGameActive = useGameNavigation()
@@ -183,53 +174,7 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3">
-                {boards.map((board) => {
-                  const selected = board.name === boardName
-
-                  return (
-                    <button
-                      type="button"
-                      key={board.name}
-                      className={clsx(
-                        'group relative overflow-hidden rounded-xl border bg-slate-900/70 text-left shadow-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:ring-offset-2 focus:ring-offset-slate-950',
-                        selected
-                          ? 'border-amber-300 ring-2 ring-amber-300/70'
-                          : 'border-white/15 hover:-translate-y-0.5 hover:border-amber-100/50',
-                      )}
-                      onClick={() => setBoardName(board.name)}
-                      aria-pressed={selected}
-                    >
-                      <span className="block aspect-square overflow-hidden bg-black/30">
-                        <img
-                          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                          src={board.image.href}
-                          alt={`${board.label} game board`}
-                        />
-                      </span>
-                      <span
-                        className={clsx(
-                          'flex items-center justify-between gap-2 border-t px-3 py-2 text-sm font-bold transition',
-                          selected
-                            ? 'border-amber-300/40 bg-amber-100 text-slate-900'
-                            : 'border-white/10 text-amber-50 group-hover:bg-white/5',
-                        )}
-                      >
-                        {board.label}
-                        <span
-                          className={clsx(
-                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border',
-                            selected ? 'border-amber-700 bg-amber-500 text-amber-950' : 'border-amber-100/35',
-                          )}
-                          aria-hidden="true"
-                        >
-                          {selected && <CheckIcon className="h-4 w-4 stroke-3" />}
-                        </span>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              <BoardSelectionCards value={boardName} onChange={setBoardName} />
             </fieldset>
           </div>
 

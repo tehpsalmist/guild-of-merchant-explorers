@@ -116,7 +116,7 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
                     <p className="truncate text-xs font-semibold uppercase tracking-widest text-amber-100/65">
                       Explorer
                     </p>
-                    <h2 className="truncate text-xl font-bold phone-landscape:text-base">{player.id}</h2>
+                    <h2 className="truncate text-xl font-bold phone-landscape:text-base">{player.displayName}</h2>
                   </div>
                 </div>
 

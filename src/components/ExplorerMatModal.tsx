@@ -69,7 +69,7 @@ export const ExplorerMatModal = ({ player, onClose }: ExplorerMatModalProps) => 
         aria-labelledby="explorer-mat-title"
       >
         <h1 id="explorer-mat-title" className="sr-only">
-          Explorer Card Mat for {player.id}
+          Explorer Card Mat for {player.displayName}
         </h1>
         <img src={explorerMat.href} alt="" className="absolute inset-0 h-full w-full" draggable={false} />
 

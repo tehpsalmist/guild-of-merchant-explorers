@@ -5,7 +5,7 @@ import SimplePeer, { SignalData } from 'simple-peer'
 import { SEND_P2P_MESSAGE } from '../graphql/mutations'
 import { LATEST_P2P_MESSAGE, P2P_MESSAGE_STREAM } from '../graphql/queries'
 
-export type PeerState = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+export type PeerState = 'not-in-room' | 'connecting' | 'connected' | 'closed'
 
 export interface PeerMessage<T = unknown> {
   id: string
@@ -13,13 +13,18 @@ export interface PeerMessage<T = unknown> {
   data: T
 }
 
+const PRESENCE_INTERVAL_MS = 10_000
+const PRESENCE_TIMEOUT_MS = 30_000
+
 type SignalingMessage =
+  | { type: 'presence'; senderSessionId: string; nonce: string; reply: boolean }
   | { type: 'probe'; senderSessionId: string }
   | { type: 'ready'; senderSessionId: string; nonce: string }
   | { type: 'start'; senderSessionId: string; sessionId: string }
   | { type: 'signal'; senderSessionId: string; sessionId: string; data: SignalData }
 
 type OutgoingSignalingMessage =
+  | { type: 'presence'; nonce: string; reply: boolean }
   | { type: 'probe' }
   | { type: 'ready'; nonce: string }
   | { type: 'start'; sessionId: string }
@@ -38,7 +43,7 @@ type ServerEvents = {
 
 export class P2PConnection extends EventEmitter<PeerEvents> {
   readonly isInitiator: boolean
-  handshakeState: PeerState = 'connecting'
+  handshakeState: PeerState = 'not-in-room'
   private peer?: SimplePeer.Instance
 
   private readonly serverConnection: ServerConnection
@@ -48,6 +53,12 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
   private lastReadyNonce?: string
   private reconnectTimer?: ReturnType<typeof setTimeout>
   private pendingMessages: string[] = []
+  private presenceTimer?: ReturnType<typeof setInterval>
+  private presenceExpiresTimer?: ReturnType<typeof setTimeout>
+  private lastRemoteActivity = 0
+  private remoteSessionId?: string
+  private readonly presenceChallenges = new Map<string, number>()
+  private checkingPresence = false
   destroyed = false
 
   constructor(
@@ -66,6 +77,8 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
     this.serverConnection.on('error', (error: unknown) => this.handleFailure(error))
 
     this.connectToCoordinator()
+    this.checkPresence()
+    this.presenceTimer = setInterval(() => this.checkPresence(), PRESENCE_INTERVAL_MS)
   }
 
   sendMessage(message: PeerMessage) {
@@ -92,6 +105,9 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
 
     this.destroyed = true
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.presenceTimer) clearInterval(this.presenceTimer)
+    if (this.presenceExpiresTimer) clearTimeout(this.presenceExpiresTimer)
+    this.presenceChallenges.clear()
     this.pendingMessages = []
     this.updateHandshakeState('closed')
     this.destroyPeer()
@@ -117,6 +133,19 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
   private handleServerMessage(message: SignalingMessage) {
     if (this.destroyed) return
 
+    if (message.type === 'presence') {
+      if (message.reply) {
+        const sentAt = this.presenceChallenges.get(message.nonce)
+        this.presenceChallenges.delete(message.nonce)
+        if (sentAt === undefined || Date.now() - sentAt >= PRESENCE_TIMEOUT_MS) return
+        this.recordRemoteActivity(message.senderSessionId)
+      } else {
+        this.sendPresence(message.nonce, true).catch((error: unknown) => this.handleFailure(error))
+      }
+      return
+    }
+
+    this.recordRemoteActivity(message.senderSessionId)
     switch (message.type) {
       case 'probe':
         if (!this.isInitiator) this.announceReady(false).catch((error: unknown) => this.handleFailure(error))
@@ -170,7 +199,7 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
       this.reconnectTimer = undefined
     }
     this.destroyPeer()
-    this.updateHandshakeState(this.handshakeState === 'connecting' ? 'connecting' : 'reconnecting')
+    this.updateHandshakeState('connecting')
 
     const peer = new SimplePeer({
       initiator: this.isInitiator,
@@ -209,7 +238,29 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
         if (typeof data !== 'string' && !(data instanceof Uint8Array)) return
         const serialized = typeof data === 'string' ? data : new TextDecoder().decode(data)
         const message: unknown = JSON.parse(serialized)
-        if (isPeerMessage(message)) this.emit('message', message)
+        if (!isPeerMessage(message)) return
+        if (this.remoteSessionId) this.recordRemoteActivity(this.remoteSessionId)
+        if (message.type === 'room-presence') {
+          const presence = message.data
+          if (
+            this.remoteSessionId &&
+            presence &&
+            typeof presence === 'object' &&
+            'nonce' in presence &&
+            typeof presence.nonce === 'string' &&
+            'reply' in presence &&
+            typeof presence.reply === 'boolean'
+          ) {
+            this.handleServerMessage({
+              type: 'presence',
+              senderSessionId: this.remoteSessionId,
+              nonce: presence.nonce,
+              reply: presence.reply,
+            })
+          }
+          return
+        }
+        this.emit('message', message)
       } catch {
         // Ignore data that does not use this application's message format.
       }
@@ -248,13 +299,68 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
 
     this.destroyPeer()
     this.sessionId = undefined
-    this.updateHandshakeState('reconnecting')
+    this.updateHandshakeState(this.hasRecentRemoteActivity() ? 'connecting' : 'not-in-room')
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined
       if (this.isInitiator) this.lastReadyNonce = undefined
       this.connectToCoordinator()
     }, 1000)
+  }
+
+  private hasRecentRemoteActivity() {
+    return this.lastRemoteActivity > 0 && Date.now() - this.lastRemoteActivity < PRESENCE_TIMEOUT_MS
+  }
+
+  private recordRemoteActivity(senderSessionId: string) {
+    if (this.remoteSessionId && this.remoteSessionId !== senderSessionId) {
+      this.destroyPeer()
+      this.sessionId = undefined
+      this.lastReadyNonce = undefined
+      this.readyNonce = undefined
+    }
+    this.remoteSessionId = senderSessionId
+    this.lastRemoteActivity = Date.now()
+    if (this.presenceExpiresTimer) clearTimeout(this.presenceExpiresTimer)
+    this.presenceExpiresTimer = setTimeout(() => {
+      if (this.destroyed) return
+      this.destroyPeer()
+      this.sessionId = undefined
+      this.lastReadyNonce = undefined
+      this.readyNonce = undefined
+      this.updateHandshakeState('not-in-room')
+    }, PRESENCE_TIMEOUT_MS)
+    this.updateHandshakeState(this.peer?.connected ? 'connected' : 'connecting')
+  }
+
+  private async sendPresence(nonce: string, reply: boolean) {
+    if (this.peer?.connected) {
+      this.peer.send(JSON.stringify({ id: createId(), type: 'room-presence', data: { nonce, reply } }))
+    } else {
+      await this.serverConnection.send({ type: 'presence', nonce, reply })
+    }
+  }
+
+  private async checkPresence() {
+    if (this.destroyed || this.checkingPresence) return
+    this.checkingPresence = true
+    try {
+      if (!this.peer?.connected) await this.serverConnection.connect()
+      if (this.destroyed) return
+      const now = Date.now()
+      for (const [nonce, sentAt] of this.presenceChallenges) {
+        if (now - sentAt >= PRESENCE_TIMEOUT_MS) this.presenceChallenges.delete(nonce)
+      }
+      const nonce = createId()
+      this.presenceChallenges.set(nonce, now)
+      await this.sendPresence(nonce, false)
+      // Continue discovery even if the other explorer entered after our initial handshake.
+      if (!this.destroyed && !this.peer) await this.connectToCoordinator()
+    } catch (error) {
+      this.handleFailure(error)
+    } finally {
+      this.checkingPresence = false
+    }
   }
 
   private updateHandshakeState(state: PeerState) {
@@ -340,7 +446,11 @@ class ServerConnection extends EventEmitter<ServerEvents> {
         next: (result) => {
           const rows = result.data?.p2p_message_stream ?? []
           for (const row of rows) {
-            if (isSignalingMessage(row.message)) this.emit('message', row.message)
+            // Stream backlogs must not make an explorer who already left appear present.
+            const age = Date.now() - Date.parse(row.created_at)
+            if (Number.isFinite(age) && age < PRESENCE_TIMEOUT_MS && isSignalingMessage(row.message)) {
+              this.emit('message', row.message)
+            }
           }
         },
         error: (subscriptionError: unknown) => {
@@ -358,6 +468,8 @@ function isSignalingMessage(value: unknown): value is SignalingMessage {
   if (typeof message.senderSessionId !== 'string') return false
 
   switch (message.type) {
+    case 'presence':
+      return typeof message.nonce === 'string' && typeof message.reply === 'boolean'
     case 'probe':
       return true
     case 'ready':

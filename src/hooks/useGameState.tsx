@@ -1,7 +1,11 @@
 import React, { ReactNode, createContext, useContext, useMemo } from 'react'
 import { BoardName, GameState, PlayerInputs, SerializedGameState } from '../game-logic/GameState'
 
-const GameStateContext = createContext<{ resetGame(): void; gameState: GameState } | null>(null)
+export const GameStateContext = createContext<{
+  resetGame(): void
+  gameState: GameState
+  storageKey: string | null
+} | null>(null)
 
 export interface GameStateProviderProps {
   children: ReactNode
@@ -36,7 +40,11 @@ export const GameStateProvider = ({ children, name, playerData, resetGame }: Gam
 
   if (!gameState) return null
 
-  return <GameStateContext.Provider value={{ gameState, resetGame }}>{children}</GameStateContext.Provider>
+  return (
+    <GameStateContext.Provider value={{ gameState, resetGame, storageKey: 'gome-serialized-game-state' }}>
+      {children}
+    </GameStateContext.Provider>
+  )
 }
 
 export const useGameState = () => {

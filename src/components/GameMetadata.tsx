@@ -202,7 +202,7 @@ const PlayerStuffButton = ({
   )
 }
 
-export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
+export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; chat?: React.ReactNode }) => {
   const { gameState } = useGameState()
   const [openCategory, setOpenCategory] = useState<MetadataCategory | null>(null)
 
@@ -247,9 +247,10 @@ export const GameMetadata = ({ viewedPlayer }: { viewedPlayer: Player }) => {
             onClick={() => setOpenCategory('home')}
           />
         </div>
+        {chat && <div className="pointer-events-auto">{chat}</div>}
         <div className="pointer-events-auto">
           <PlayerStuffButton
-            playerName={player.id}
+            playerName={player.displayName}
             color={player.color}
             investigateCards={player.investigateCards.keptCards}
             selected={openCategory === 'player'}
@@ -397,7 +398,7 @@ const PlayerStuffDialog = ({ player, onClose }: { player: Player; onClose(): voi
   }
 
   return (
-    <MetadataDialog title={`${player.id}'s Stuff`} eyebrow="Explorer Ledger" onClose={onClose}>
+    <MetadataDialog title={`${player.displayName}'s Stuff`} eyebrow="Explorer Ledger" onClose={onClose}>
       <div className="h-full overflow-y-auto p-3 sm:p-5 phone-landscape:p-2">
         <section>
           <h2 className="mb-2 text-center font-serif text-xl text-amber-50 sm:text-2xl phone-landscape:mb-1 phone-landscape:text-lg">

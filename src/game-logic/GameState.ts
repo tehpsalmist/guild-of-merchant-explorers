@@ -406,11 +406,13 @@ export type PlayerMode =
 
 export interface PlayerInputs {
   id: string
+  displayName?: string
   color: string
 }
 
 export class Player extends EventTarget {
   id: string
+  displayName: string
   color: string
 
   gameState: GameState
@@ -447,7 +449,7 @@ export class Player extends EventTarget {
   freeExploreQuantity = 0
 
   constructor(
-    { id, color }: PlayerInputs,
+    { id, displayName = id, color }: PlayerInputs,
     gameState: GameState,
     serializedMoveHistory?: SerializedMoveHistory,
     serializedCandidates?: [SerializedCard, SerializedCard] | null,
@@ -455,6 +457,7 @@ export class Player extends EventTarget {
     super()
 
     this.id = id
+    this.displayName = displayName
     this.color = color
 
     this.gameState = gameState

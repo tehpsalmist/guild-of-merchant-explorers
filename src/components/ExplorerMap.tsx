@@ -412,7 +412,7 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
             <EraCards
               player={player}
               className="col-start-1 row-start-2 h-full w-full"
-              aria-label={`${player.id}'s Investigate cards`}
+              aria-label={`${player.displayName}'s Investigate cards`}
             />
             <div
               id={`explorer-map-${player.id.toLowerCase()}`}
@@ -455,7 +455,7 @@ export const ExplorerMap = ({ className = '', player, isActive, onViewNextPlayer
           <button
             type="button"
             className="inline-flex ml-auto max-w-[45vw] shrink-0 items-center rounded-full border border-white/20 bg-slate-900/65 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900/80 focus:outline-none focus:ring-2 focus:ring-white/80 mobile:px-2 mobile:py-1.5 mobile:text-xs ph:px-2 ph:py-1.5 ph:text-xs phone-landscape:px-2 phone-landscape:py-1.5 phone-landscape:text-xs"
-            aria-label={`Viewing ${player.id}'s board. View next player's board.`}
+            aria-label={`Viewing ${player.displayName}'s board. View next player's board.`}
             title="View next player's board"
             onClick={onViewNextPlayer}
           >
@@ -478,7 +478,7 @@ const PlayerName = ({ player }: { player: Player }) => (
       className="h-6 w-6 shrink-0 object-contain mobile:h-5 mobile:w-5 ph:h-5 ph:w-5 phone-landscape:h-5 phone-landscape:w-5"
       aria-hidden="true"
     />
-    <span className="truncate">{player.id}</span>
+    <span className="truncate">{player.displayName}</span>
     <span className="h-5 w-px shrink-0 bg-white/25 mobile:h-4 ph:h-4 phone-landscape:h-4" aria-hidden="true" />
     <span
       className="inline-flex shrink-0 items-center gap-1 font-bold tabular-nums text-white"

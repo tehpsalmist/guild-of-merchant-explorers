@@ -11,6 +11,9 @@ import type { InvestigateCard, TreasureCard } from '../game-logic/Cards'
 import type { Player } from '../game-logic/GameState'
 import { MetadataDialog } from './MetadataDialog'
 import { TreasureCardDialog } from './TreasureCardDialog'
+import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
+import { GameTableTalk } from './GameTableTalk'
+import { useUserId } from '@nhost/react'
 
 export interface GameBoardProps extends ComponentProps<'main'> {}
 
@@ -88,8 +91,13 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const [viewedPlayerId, setViewedPlayerId] = useState<string>()
   const updateState = useState(0)[1]
 
-  const { gameState, resetGame } = useGameState()
+  const { gameState, resetGame, storageKey } = useGameState()
+  const onlineGame = useOptionalOnlineGameState()
+  const userId = useUserId()
   const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.players[0]
+  // Local games deliberately allow taking any explorer's turn. Online games
+  // only allow the signed-in explorer to make moves, while every board remains viewable.
+  const canControlViewedPlayer = !onlineGame || viewedPlayer.id === userId
 
   const isInvestigateChoice = ['choosing-investigate-card', 'choosing-investigate-card-reuse'].includes(
     viewedPlayer.mode,
@@ -97,7 +105,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const isPlayerChoice = ['user-prompting', 'treasure-to-draw'].includes(viewedPlayer.mode)
 
   useEventListener('keydown', (e) => {
-    if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+    if (canControlViewedPlayer && e.key === 'z' && (e.ctrlKey || e.metaKey)) {
       viewedPlayer.selectUndo()
     }
   })
@@ -105,7 +113,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   useEffect(() => {
     const stateListener = () => updateState((s) => ++s)
     const serializationListener = (e: CustomEvent<{ serializedData: string }>) => {
-      localStorage.setItem('gome-serialized-game-state', e.detail.serializedData)
+      if (storageKey) localStorage.setItem(storageKey, e.detail.serializedData)
     }
     const playerTurnListener = (e: CustomEvent<{playerId: string}>) => {
       setViewedPlayerId(e.detail.playerId)
@@ -120,7 +128,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
       gameState.removeEventListener('onserialize', { handleEvent: serializationListener })
       gameState.removeEventListener('onplayerturn', { handleEvent: playerTurnListener })
     }
-  }, [gameState])
+  }, [gameState, storageKey])
 
   useEffect(() => {
     setViewedPlayerId(viewedPlayer.id)
@@ -134,6 +142,8 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   }
 
   useEffect(() => {
+    if (!canControlViewedPlayer) return
+
     const activePlayer = viewedPlayer
     const treasureListener = () => {
       const drawnTreasure = activePlayer.treasureCards.cards[activePlayer.treasureCards.size - 1]
@@ -141,16 +151,23 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
       if (drawnTreasure) {
         setNewTreasureCard({
           card: drawnTreasure.card,
-          playerName: activePlayer.id,
+          playerName: activePlayer.displayName,
         })
       }
     }
     activePlayer.addEventListener('treasure-gained', treasureListener)
 
     return () => activePlayer.removeEventListener('treasure-gained', treasureListener)
-  }, [viewedPlayer])
+  }, [viewedPlayer, canControlViewedPlayer])
 
   useEffect(() => {
+    if (!canControlViewedPlayer) {
+      setNewTreasureCard(null)
+      setUserPromptOpen(false)
+      setInvestigateModalOpen(false)
+      return
+    }
+
     if (newTreasureCard) {
       setUserPromptOpen(false)
       setInvestigateModalOpen(false)
@@ -172,7 +189,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
       setInvestigateModalOpen(false)
       setUserPromptOpen(true)
     }
-  }, [gameState.gameOver, isInvestigateChoice, isPlayerChoice, newTreasureCard])
+  }, [canControlViewedPlayer, gameState.gameOver, isInvestigateChoice, isPlayerChoice, newTreasureCard])
 
   const isEndOfPhase =
     viewedPlayer.moveHistory.getPlacedHexes()[viewedPlayer.cardPhase]?.size ===
@@ -185,9 +202,9 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
 
   return (
     <>
-      <GameMetadata viewedPlayer={viewedPlayer} />
+      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && <GameTableTalk p2pRoom={onlineGame.p2pRoom} />} />
       <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 hover:z-80 focus-within:z-80 landscape:max-w-[calc(100dvw-10rem)]">
-        {isInvestigateChoice && (
+        {canControlViewedPlayer && isInvestigateChoice && (
           <GameActionButton
             label="Choose Investigate Card"
             highlighted
@@ -195,7 +212,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
             onClick={() => setInvestigateModalOpen(true)}
           />
         )}
-        {viewedPlayer.mode === 'exploring' &&
+        {canControlViewedPlayer && viewedPlayer.mode === 'exploring' &&
           viewedPlayer.currentCardRules &&
           (!gameState.currentExplorerCard ||
             (viewedPlayer.currentCardRules?.length ?? 1) - 1 === viewedPlayer.cardPhase) && (
@@ -212,7 +229,7 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
               }}
             />
           )}
-        {viewedPlayer.mode === 'exploring' &&
+        {canControlViewedPlayer && viewedPlayer.mode === 'exploring' &&
           viewedPlayer.currentCardRules &&
           (viewedPlayer.currentCardRules?.length ?? 1) - 1 !== viewedPlayer.cardPhase && (
             <GameActionButton
@@ -224,10 +241,10 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
         {gameState.gameOver && (
           <GameActionButton label="Score Board" highlighted onClick={() => setScoreBoardOpen(true)} />
         )}
-        {!userPromptOpen && isPlayerChoice && !newTreasureCard && (
+        {canControlViewedPlayer && !userPromptOpen && isPlayerChoice && !newTreasureCard && (
           <GameActionButton label="View Choices" highlighted onClick={() => setUserPromptOpen(true)} />
         )}
-        {viewedPlayer.moveHistory.size > 0 && (
+        {canControlViewedPlayer && viewedPlayer.moveHistory.size > 0 && (
           <GameActionButton
             label="Undo"
             icon={<UTurnIcon className="h-7 w-7" aria-hidden="true" />}
@@ -243,11 +260,11 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
         <ExplorerMap
           key={viewedPlayer.id}
           player={viewedPlayer}
-          isActive={viewedPlayer === viewedPlayer}
+          isActive={canControlViewedPlayer}
           onViewNextPlayer={gameState.players.length > 1 ? viewNextPlayer : undefined}
         />
       </main>
-      {isPlayerChoice && userPromptOpen && !newTreasureCard && (
+      {canControlViewedPlayer && isPlayerChoice && userPromptOpen && !newTreasureCard && (
         <PlayerChoicesDialog
           player={viewedPlayer}
           onClose={() => setUserPromptOpen(false)}
@@ -277,10 +294,10 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
           }}
         />
       )}
-      {(isInvestigateChoice) && investigateModalOpen && !newTreasureCard && (
+      {canControlViewedPlayer && isInvestigateChoice && investigateModalOpen && !newTreasureCard && (
         <InvestigateChoiceDialog
           era={gameState.era}
-          playerName={viewedPlayer.id}
+          playerName={viewedPlayer.displayName}
           cards={
             (gameState.era < 3
               ? viewedPlayer.investigateCardCandidates
@@ -340,7 +357,7 @@ const PlayerChoicesDialog = ({
   onPlaceVillage,
   onUndo,
 }: PlayerChoicesDialogProps) => (
-  <MetadataDialog title="Choose Your Next Move" eyebrow={`${player.id}'s Turn`} onClose={onClose}>
+  <MetadataDialog title="Choose Your Next Move" eyebrow={`${player.displayName}'s Turn`} onClose={onClose}>
     <div className="flex h-full items-center justify-center overflow-y-auto p-4 sm:p-6 phone-landscape:p-3">
       <div className="w-full max-w-xl rounded-2xl border border-amber-100/20 bg-black/25 p-3 shadow-xl sm:p-4 phone-landscape:p-2">
         <div className="grid gap-2.5 sm:grid-cols-2 phone-landscape:grid-cols-2 phone-landscape:gap-2">

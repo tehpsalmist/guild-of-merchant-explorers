@@ -89,20 +89,20 @@ export const HostControls = ({
         <Modal
           portal
           onClose={() => setInvitingUsers(false)}
-          overlayClasses="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4"
+          overlayClasses="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
           bgClass="bg-slate-950/90"
-          className="w-full max-w-xl overflow-hidden! border border-amber-100/20 bg-slate-950! p-0! text-amber-50 shadow-2xl"
+          className="w-full max-w-4xl overflow-hidden! border border-amber-100/20 bg-slate-950! p-0! text-amber-50 shadow-2xl"
           role="dialog"
           aria-modal="true"
           aria-labelledby={`manage-players-${room.id}`}
         >
-          <header className="flex items-start gap-3 border-b border-amber-100/15 px-5 py-4 sm:px-6">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
+          <header className="flex items-start gap-3 border-b border-amber-100/15 px-4 py-3 sm:px-7 sm:py-5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200 sm:h-10 sm:w-10">
               <UserGroupIcon className="h-6 w-6" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="text-[0.65rem] font-bold uppercase tracking-[0.24em] text-amber-100/50">Your table</p>
-              <h2 className="truncate font-serif text-2xl text-amber-50" id={`manage-players-${room.id}`}>
+              <p className="hidden text-[0.65rem] font-bold uppercase tracking-[0.24em] text-amber-100/50 sm:block">Your table</p>
+              <h2 className="truncate font-serif text-xl text-amber-50 sm:text-2xl" id={`manage-players-${room.id}`}>
                 {room.name}
               </h2>
             </div>
@@ -116,7 +116,7 @@ export const HostControls = ({
             />
           </header>
 
-          <div className="grid max-h-[75dvh] gap-6 overflow-y-auto px-5 py-5 sm:grid-cols-2 sm:px-6">
+          <div className="grid max-h-[75dvh] gap-6 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-8">
             <section>
               <div className="mb-3 flex items-baseline justify-between gap-2">
                 <h3 className="font-serif text-xl text-amber-50">At the table</h3>
@@ -138,7 +138,7 @@ export const HostControls = ({
                       <div className="min-w-0 grow">
                         <p className="truncate text-sm font-bold text-amber-50">{player?.displayName ?? 'Explorer'}</p>
                         <p className="text-xs text-amber-100/45">
-                          {isHost ? 'Host' : member.invite_accepted ? 'Ready' : 'Invite pending'}
+                          {isHost ? 'Host' : member.invite_accepted ? 'Invitation accepted' : 'Invitation pending'}
                         </p>
                       </div>
                       {!isHost && (
@@ -169,7 +169,7 @@ export const HostControls = ({
               </ul>
             </section>
 
-            <section>
+            <section className="border-t border-amber-100/15 pt-6 md:border-t-0 md:border-l md:border-amber-100/15 md:pl-8 md:pt-0">
               <div className="mb-3 flex items-baseline justify-between gap-2">
                 <h3 className="font-serif text-xl text-amber-50">Invite an explorer</h3>
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-100/45">

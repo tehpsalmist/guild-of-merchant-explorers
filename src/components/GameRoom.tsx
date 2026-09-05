@@ -1,4 +1,13 @@
-import React, { ComponentProps, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  ComponentProps,
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { Main } from '../design-system/Main'
 import { useAuthSubscription } from '@nhost/react-apollo'
@@ -8,11 +17,10 @@ import { usePlayerList } from '../hooks/usePlayerList'
 import {
   ArrowLeftIcon,
   ChatBubbleLeftRightIcon,
-  CheckCircleIcon,
-  ClockIcon,
   GlobeAltIcon,
   LockClosedIcon,
   PaperAirplaneIcon,
+  PlayIcon,
   UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -22,12 +30,21 @@ import { useApolloClient } from '@apollo/client'
 import clsx from 'clsx'
 import { Avatar } from './Avatar'
 import { HostControls } from './HostControls'
+import { ColorPicker } from './ColorPicker'
+import { ExplorerBlock } from './ExplorerBlock'
+import { RoomBoardPicker } from './RoomBoardPicker'
+import type { GameInputs } from '../game-logic/GameState'
+import { OnlineGameStateProvider } from '../hooks/useOnlineGameState'
+import { useGameNavigation } from '../hooks/useGameNavigation'
+import { GameBoard } from './GameBoard'
+import { assembleRoomGame } from '../game-logic/room-setup'
+import { useRoomSetup } from '../hooks/useRoomSetup'
 import { ExpeditionButton, expeditionButtonClasses } from '../design-system/ExpeditionButton'
 import { CLOSE_ROOM } from '../graphql/mutations'
 import { toast } from '@8thday/react'
 import { getGraphqlErrorMessage } from '../graphql/utils'
 
-type PeerState = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+import type { PeerState } from '../p2p-connection/p2p-connection'
 
 interface ChatMessage {
   message: string
@@ -39,6 +56,12 @@ export interface GameRoomProps extends ComponentProps<'main'> {}
 
 export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const [p2pRoom, setP2PRoom] = useState<P2PRoom>()
+  const [startedGame, setStartedGame] = useState<{
+    roomId: number
+    inputs: Required<GameInputs>
+    p2pRoom: P2PRoom
+  }>()
+  const setGameActive = useGameNavigation()
   const [sessionError, setSessionError] = useState<string>()
   const [sessionRetry, setSessionRetry] = useState(0)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -61,6 +84,12 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     skip: !Number.isInteger(numericRoomId),
   })
   const room = data?.room_by_pk
+  const gameActive = !!startedGame && startedGame.roomId === room?.id
+  useLayoutEffect(() => {
+    setGameActive(gameActive)
+    return () => setGameActive(false)
+  }, [gameActive, setGameActive])
+  const { setup, colorError, chooseBoard, chooseColor } = useRoomSetup(room, numericRoomId, userId, p2pRoom)
 
   const memberUserIdLookup = useMemo<Record<number, string>>(
     () =>
@@ -121,9 +150,10 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     let nextRoom: P2PRoom | undefined
     let cancelled = false
     setP2PRoom(undefined)
+    setPeerStates({})
     setSessionError(undefined)
 
-    void P2PRoom.connect(room, userId, nhost, apollo)
+    P2PRoom.connect(room, userId, nhost, apollo)
       .then((connectedRoom) => {
         if (cancelled) return connectedRoom.destroy()
         nextRoom = connectedRoom
@@ -191,24 +221,61 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const acceptedMembers = room.members.filter((member) => member.invite_accepted)
   const currentMember = room.members.find((member) => member.player_id === userId)
   const isHost = room.host_id === userId
-  const peerCount = p2pRoom?.connections.size ?? 0
-  const connectedPeerCount = Object.values(peerStates).filter((state) => state === 'connected').length
-  const canChat = peerCount > 0
-  const connectionLabel =
-    peerCount === 0
-      ? 'Waiting for another explorer'
-      : connectedPeerCount === peerCount
-        ? 'Conversation live'
-        : 'Connecting conversation…'
+  const assembledGame = isHost
+    ? assembleRoomGame(
+        room,
+        setup,
+        userId,
+        Object.fromEntries(Object.entries(userLookup).map(([id, player]) => [id, player.displayName])),
+      )
+    : null
+  const hasRoomSession = !!p2pRoom && p2pRoom.id === room.id && p2pRoom.myId === currentMember?.id && !sessionError
+  const startRequirements = [
+    ...(assembledGame?.requirements ?? []),
+    ...(!hasRoomSession ? ['Connect to the room before starting.'] : []),
+  ]
+  const startGame = () => {
+    if (!isHost || !assembledGame?.inputs || !hasRoomSession || !p2pRoom) return
+    setStartedGame({ roomId: room.id, inputs: assembledGame.inputs, p2pRoom })
+  }
+
+  const isMemberConnected = (member: (typeof room.members)[number]) =>
+    hasRoomSession &&
+    member.invite_accepted &&
+    (member.id === currentMember?.id || peerStates[member.id] === 'connected')
+  const connectedMembers = room.members.filter(isMemberConnected)
+  const connectedPeerCount = connectedMembers.filter((member) => member.id !== currentMember?.id).length
+  const canChat = connectedPeerCount > 0
+  const connectionLabel = sessionError
+    ? 'Room connection lost'
+    : !hasRoomSession
+      ? 'Connecting to room…'
+      : canChat
+        ? `Chat connected with ${connectedPeerCount} ${connectedPeerCount === 1 ? 'explorer' : 'explorers'}`
+        : 'Waiting for another explorer to connect'
 
   const sendMessage = (event?: FormEvent) => {
     event?.preventDefault()
     const message = draft.trim()
     if (!message || !p2pRoom || !currentMember || !canChat) return
 
-    p2pRoom.sendMessages(JSON.stringify({ type: 'text-message', data: message }))
+    p2pRoom.sendMessages(message)
     setChatMessages((currentMessages) => [...currentMessages, { id: currentMember.id, message, sentAt: new Date() }])
     setDraft('')
+  }
+
+  if (gameActive && startedGame) {
+    return (
+      <OnlineGameStateProvider
+        key={startedGame.roomId}
+        name={startedGame.inputs.boardName}
+        playerData={startedGame.inputs.playerData}
+        p2pRoom={p2pRoom ?? startedGame.p2pRoom}
+        resetGame={() => setStartedGame(undefined)}
+      >
+        <GameBoard className={className} {...props} />
+      </OnlineGameStateProvider>
+    )
   }
 
   return (
@@ -257,7 +324,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             <div className="flex flex-col gap-3 border-t border-amber-100/10 pt-4 sm:flex-row sm:items-center">
               <div className="flex items-center gap-3">
                 <div className="flex -space-x-2" aria-hidden="true">
-                  {acceptedMembers.slice(0, 4).map((member) => (
+                  {connectedMembers.slice(0, 4).map((member) => (
                     <Avatar
                       key={member.id}
                       className="h-8 w-8 border-2 border-slate-950 bg-amber-50/10"
@@ -265,10 +332,14 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                     />
                   ))}
                 </div>
-                <p className="text-sm text-amber-100/60">
-                  <strong className="text-amber-50">{acceptedMembers.length}</strong> of {room.members.length}{' '}
-                  {room.members.length === 1 ? 'player' : 'players'} ready
-                </p>
+                <div className="text-sm text-amber-100/60">
+                  <p>
+                    <strong className="text-emerald-300">{connectedMembers.length}</strong> connected now
+                  </p>
+                  <p className="text-xs">
+                    {acceptedMembers.length} of {room.members.length} invitations accepted
+                  </p>
+                </div>
               </div>
               {isHost && <HostControls className="sm:ml-auto" room={room} showLabels showClose={false} />}
             </div>
@@ -284,7 +355,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
           )}
 
           <section
-            className="self-start rounded-2xl border border-amber-100/15 bg-black/25 p-4 shadow-xl backdrop-blur-sm sm:p-5"
+            className="relative z-10 self-start rounded-2xl border border-amber-100/15 bg-black/25 p-4 shadow-xl backdrop-blur-sm sm:p-5"
             aria-labelledby="players-heading"
           >
             <div className="mb-4 flex items-start gap-3">
@@ -295,7 +366,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                 <h2 className="font-serif text-2xl text-amber-50" id="players-heading">
                   Explorers
                 </h2>
-                <p className="text-xs text-amber-100/45">Everyone invited to this table</p>
+                <p className="text-xs text-amber-100/45">Invitation acceptance and live connection status</p>
               </div>
             </div>
 
@@ -304,12 +375,21 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                 const player = userLookup[member.player_id]
                 const isCurrentUser = member.player_id === userId
                 const isMemberHost = member.player_id === room.host_id
+                const connected = isMemberConnected(member)
+                const color = setup.colors[member.id] ?? ''
+                const canChooseColor = member.invite_accepted && (isHost || (isCurrentUser && hasRoomSession))
+                const connecting =
+                  member.invite_accepted &&
+                  (isCurrentUser
+                    ? !hasRoomSession && !sessionError
+                    : hasRoomSession && peerStates[member.id] === 'connecting')
+                const connectionStatus = connected ? 'Connected' : connecting ? 'Connecting' : 'Not in room'
 
                 return (
                   <li
                     key={member.id}
                     className={clsx(
-                      'flex min-w-0 items-center gap-3 rounded-xl border p-3',
+                      'flex min-w-0 flex-wrap items-center gap-3 rounded-xl border p-3',
                       member.invite_accepted
                         ? 'border-amber-100/10 bg-white/5'
                         : 'border-dashed border-amber-200/20 bg-black/15',
@@ -320,7 +400,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                       <span
                         className={clsx(
                           'absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-slate-950',
-                          member.invite_accepted ? 'bg-emerald-400' : 'bg-amber-500',
+                          connected ? 'bg-emerald-400' : connecting ? 'bg-amber-400' : 'bg-slate-500',
                         )}
                         aria-hidden="true"
                       />
@@ -329,21 +409,94 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                       <p className="truncate text-sm font-bold text-amber-50">
                         {player?.displayName ?? 'Explorer'}{' '}
                         {isCurrentUser && <span className="text-amber-100/45">(you)</span>}
+                        {isMemberHost && <span className="text-amber-100/45"> · Host</span>}
                       </p>
                       <p className="text-xs text-amber-100/45">
-                        {isMemberHost ? 'Host' : member.invite_accepted ? 'Ready and waiting' : 'Invitation pending'}
+                        {member.invite_accepted ? 'Invitation accepted' : 'Invitation pending'}
+                      </p>
+                      <p
+                        className={clsx(
+                          'mt-1 text-xs',
+                          connected ? 'text-emerald-300' : connecting ? 'text-amber-300' : 'text-amber-100/55',
+                        )}
+                      >
+                        {connectionStatus}
                       </p>
                     </div>
-                    {member.invite_accepted ? (
-                      <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-400" aria-label="Ready" />
-                    ) : (
-                      <ClockIcon className="h-5 w-5 shrink-0 text-amber-300/70" aria-label="Invitation pending" />
+                    {member.invite_accepted && (
+                      <div className="flex w-full items-center justify-between gap-2 border-t border-amber-100/10 pt-2">
+                        <span className="text-xs text-amber-100/55">
+                          {isCurrentUser ? 'Your color' : 'Explorer color'}
+                        </span>
+                        {canChooseColor ? (
+                          <ColorPicker
+                            key={`${room.id}-${member.id}-${color}`}
+                            value={color}
+                            aria-label={`Choose ${isCurrentUser ? 'your' : `${player?.displayName ?? 'explorer'}’s`} color`}
+                            disabledColors={room.members
+                              .filter((other) => other.id !== member.id && other.invite_accepted)
+                              .map((other) => setup.colors[other.id] ?? '')}
+                            onValueChange={(newColor) => {
+                              if (!canChooseColor) return
+                              chooseColor(member.id, newColor)
+                            }}
+                          />
+                        ) : (
+                          <ExplorerBlock className={clsx('h-9', !color && 'opacity-50')} color={color} />
+                        )}
+                      </div>
+                    )}
+                    {isCurrentUser && !isHost && colorError && (
+                      <p className="w-full rounded-lg border border-red-300/25 bg-red-950/35 px-3 py-2 text-xs text-red-100" role="alert">
+                        {colorError}
+                      </p>
                     )}
                   </li>
                 )
               })}
             </ul>
           </section>
+
+          <RoomBoardPicker
+            value={setup.boardName}
+            isHost={isHost}
+            onChange={chooseBoard}
+          />
+
+          {isHost && (
+            <section className="flex flex-col gap-4 rounded-2xl border border-amber-200/30 bg-linear-to-br from-amber-400/15 to-amber-950/20 p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div>
+                <h2 className="font-serif text-2xl text-amber-50">Ready for an adventure?</h2>
+                <div id="start-game-requirements" aria-live="polite" className="mt-2 text-sm text-amber-100/70">
+                  {assembledGame?.inputs && startRequirements.length === 0 ? (
+                    <p>
+                      All set for {assembledGame.inputs.playerData.length}{' '}
+                      {assembledGame.inputs.playerData.length === 1 ? 'explorer' : 'explorers'}.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-bold text-amber-200">Still needed:</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {startRequirements.map((requirement, index) => (
+                          <li key={`${index}-${requirement}`}>{requirement}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              </div>
+              <ExpeditionButton
+                tone="primary"
+                Icon={PlayIcon}
+                disabled={!assembledGame?.inputs || startRequirements.length > 0}
+                aria-describedby="start-game-requirements"
+                onClick={startGame}
+                className="min-h-14 w-full px-7 py-4 text-base shadow-amber-400/15 sm:w-auto"
+              >
+                Start Game
+              </ExpeditionButton>
+            </section>
+          )}
 
           {isHost && (
             <footer className="mt-auto border-t border-amber-100/10 pt-5">
@@ -391,10 +544,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
               </h2>
               <p className="flex items-center gap-1.5 text-xs text-amber-100/45">
                 <span
-                  className={clsx(
-                    'h-2 w-2 shrink-0 rounded-full',
-                    connectedPeerCount === peerCount && peerCount > 0 ? 'bg-emerald-400' : 'bg-amber-400',
-                  )}
+                  className={clsx('h-2 w-2 shrink-0 rounded-full', canChat ? 'bg-emerald-400' : 'bg-amber-400')}
                   aria-hidden="true"
                 />
                 {connectionLabel}
@@ -422,7 +572,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                 <p className="mt-1 hidden max-w-sm text-sm leading-6 text-amber-100/45 lg:block">
                   {canChat
                     ? 'Say hello, compare notes, or pass the time while everyone gathers.'
-                    : 'Once another player accepts their invitation, you can chat right here.'}
+                    : 'Once another player enters the room and connects, you can chat right here.'}
                 </p>
               </div>
             ) : (
@@ -529,8 +679,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             </div>
             <div className="mt-2 hidden items-center justify-between gap-3 px-1 lg:flex">
               <p className="text-[0.65rem] text-amber-100/35">
-                {canChat && connectedPeerCount < peerCount
-                  ? 'Messages will send when the connection is ready.'
+                {canChat && connectedMembers.length < acceptedMembers.length
+                  ? 'Messages for disconnected players are queued until they connect.'
                   : 'Enter to send · Shift + Enter for a new line'}
               </p>
               {draft.length > 400 && <span className="text-[0.65rem] text-amber-100/35">{draft.length}/500</span>}
