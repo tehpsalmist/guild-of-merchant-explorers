@@ -15,7 +15,9 @@ import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
 import { GameTableTalk } from './GameTableTalk'
 import { useUserId } from '@nhost/react'
 
-export interface GameBoardProps extends ComponentProps<'main'> {}
+export interface GameBoardProps extends ComponentProps<'main'> {
+  followPlayerTurns?: boolean
+}
 
 interface GameActionButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
   label: string
@@ -80,7 +82,7 @@ const InvestigateActionIcon = ({ cards }: { cards: Array<{ id: string; imageUrl:
   </span>
 )
 
-export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
+export const GameBoard = ({ className = '', followPlayerTurns = false, ...props }: GameBoardProps) => {
   const [investigateModalOpen, setInvestigateModalOpen] = useState(false)
   const [newTreasureCard, setNewTreasureCard] = useState<{
     card: TreasureCard
@@ -94,10 +96,15 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
   const { gameState, resetGame, storageKey } = useGameState()
   const onlineGame = useOptionalOnlineGameState()
   const userId = useUserId()
-  const viewedPlayer = gameState.players.find((player) => player.id === viewedPlayerId) ?? gameState.players[0]
+  const defaultViewedPlayer = onlineGame
+    ? gameState.players.find((player) => player.id === userId)
+    : gameState.players.find((player) => !gameState.readyPlayers.includes(player))
+  const viewedPlayer =
+    gameState.players.find((player) => player.id === viewedPlayerId) ?? defaultViewedPlayer ?? gameState.players[0]
   // Local games deliberately allow taking any explorer's turn. Online games
   // only allow the signed-in explorer to make moves, while every board remains viewable.
-  const canControlViewedPlayer = !onlineGame || viewedPlayer.id === userId
+  const canControlViewedPlayer =
+    (!onlineGame || viewedPlayer.id === userId) && !gameState.readyPlayers.includes(viewedPlayer) && !onlineGame?.drawingTreasure
 
   const isInvestigateChoice = ['choosing-investigate-card', 'choosing-investigate-card-reuse'].includes(
     viewedPlayer.mode,
@@ -115,20 +122,22 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
     const serializationListener = (e: CustomEvent<{ serializedData: string }>) => {
       if (storageKey) localStorage.setItem(storageKey, e.detail.serializedData)
     }
-    const playerTurnListener = (e: CustomEvent<{playerId: string}>) => {
+    const playerTurnListener = (e: CustomEvent<{ playerId: string }>) => {
       setViewedPlayerId(e.detail.playerId)
     }
+    const playerTurnEventListener = { handleEvent: playerTurnListener }
+    const serializationEventListener = { handleEvent: serializationListener }
 
     gameState.addEventListener('onstatechange', stateListener)
-    gameState.addEventListener('onserialize', { handleEvent: serializationListener })
-    gameState.addEventListener('onplayerturn', { handleEvent: playerTurnListener })
+    gameState.addEventListener('onserialize', serializationEventListener)
+    if (followPlayerTurns) gameState.addEventListener('onplayerturn', playerTurnEventListener)
 
     return () => {
       gameState.removeEventListener('onstatechange', stateListener)
-      gameState.removeEventListener('onserialize', { handleEvent: serializationListener })
-      gameState.removeEventListener('onplayerturn', { handleEvent: playerTurnListener })
+      gameState.removeEventListener('onserialize', serializationEventListener)
+      if (followPlayerTurns) gameState.removeEventListener('onplayerturn', playerTurnEventListener)
     }
-  }, [gameState, storageKey])
+  }, [followPlayerTurns, gameState, storageKey])
 
   useEffect(() => {
     setViewedPlayerId(viewedPlayer.id)
@@ -269,6 +278,11 @@ export const GameBoard = ({ className = '', ...props }: GameBoardProps) => {
           player={viewedPlayer}
           onClose={() => setUserPromptOpen(false)}
           onDrawTreasure={() => {
+            if (onlineGame) {
+              setUserPromptOpen(false)
+              onlineGame.drawTreasure()
+              return
+            }
             const [treasureCard] = gameState.treasureDeck.drawCards()
 
             if (!treasureCard) return

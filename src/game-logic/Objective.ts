@@ -55,8 +55,8 @@ export interface SerializedObjective {
   turnAndEraOfFirstAward?: [number, number]
   isFirstBlocked: boolean
   isSecondBlocked: boolean
-  firstPlayers: SerializedPlayer[]
-  secondPlayers: SerializedPlayer[]
+  firstPlayers: Pick<SerializedPlayer, 'id'>[]
+  secondPlayers: Pick<SerializedPlayer, 'id'>[]
 }
 
 export interface ObjectiveData {

@@ -9,29 +9,28 @@ export const GameStateContext = createContext<{
 
 export interface GameStateProviderProps {
   children: ReactNode
+  serializedGame: string
+  autoAdvance?: boolean
   storageKey: string
   resetGame(): void
 }
 
-export const GameStateProvider = ({ children, storageKey, resetGame }: GameStateProviderProps) => {
+export const GameStateProvider = ({ children, serializedGame, storageKey, resetGame, autoAdvance = true }: GameStateProviderProps) => {
   const gameState = useMemo(() => {
-    const savedState = localStorage.getItem(storageKey)
+    try {
+      // Saved locally by GameState.toJSON.
+      const parsedState = JSON.parse(serializedGame) as SerializedGameState
+      const restoredGameState = new GameState({ boardName: parsedState.boardName }, parsedState)
+      restoredGameState.autoAdvance = autoAdvance
+      restoredGameState.players.forEach((p) => p.replayMoves())
 
-    if (savedState) {
-      try {
-        // Saved locally by GameState.toJSON.
-        const parsedState = JSON.parse(savedState) as SerializedGameState
-        const restoredGameState = new GameState({ boardName: parsedState.boardName }, parsedState)
-        restoredGameState.players.forEach((p) => p.replayMoves())
+      if (restoredGameState.gameOver) restoredGameState.tallyScores()
 
-        if (restoredGameState.gameOver) restoredGameState.tallyScores()
-
-        return restoredGameState
-      } catch (e) {
-        console.error('bad game state:', e, savedState)
-      }
+      return restoredGameState
+    } catch (e) {
+      console.error('bad game state:', e, serializedGame)
     }
-  }, [storageKey])
+  }, [serializedGame, autoAdvance])
 
   if (!gameState) return null
 

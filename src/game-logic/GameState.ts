@@ -70,6 +70,13 @@ export interface SerializedGameState {
   gameOver: boolean
 }
 
+export type SerializedSharedGameState = Omit<SerializedGameState, 'players' | 'objectives'> & {
+  objectives: Array<Omit<SerializedObjective, 'firstPlayers' | 'secondPlayers'> & {
+    firstPlayers: Array<{ id: string }>
+    secondPlayers: Array<{ id: string }>
+  }>
+}
+
 export interface GameInputs {
   boardName: BoardName
   playerData?: PlayerInputs[]
@@ -80,6 +87,7 @@ export class GameState extends EventTarget {
 
   soloMode = false
   localMode = true
+  autoAdvance = true
 
   players: Player[] = []
 
@@ -169,7 +177,7 @@ export class GameState extends EventTarget {
       this.readyPlayers.push(p)
     }
 
-    if (this.readyPlayers.length === this.players.length) {
+    if (this.autoAdvance && this.readyPlayers.length === this.players.length) {
       this.flipExplorerCard()
       this.readyPlayers = []
     }
@@ -308,9 +316,58 @@ export class GameState extends EventTarget {
     }
   }
 
+  toSharedJSON(): SerializedSharedGameState {
+    const { players: _players, objectives: _objectives, ...shared } = this.toJSON()
+    return {
+      ...shared,
+      objectives: this.objectives.map((objective) => ({
+        ...objective.toJSON(),
+        firstPlayers: objective.firstPlayers.map(({ id }) => ({ id })),
+        secondPlayers: objective.secondPlayers.map(({ id }) => ({ id })),
+      })),
+    }
+  }
+
+  restoreSharedState(data: SerializedSharedGameState) {
+    const rewards = (player: Player) => this.objectives.reduce((sum, objective) => sum +
+      (objective.firstPlayers.includes(player) ? objective.firstPlaceReward : 0) +
+      (objective.secondPlayers.includes(player) ? objective.secondPlaceReward : 0), 0)
+    const previousRewards = this.players.map(rewards)
+    this.restoreSharedFields(data)
+    this.players.forEach((player, index) => { player.coins += rewards(player) - previousRewards[index] })
+    this.emitStateChange()
+  }
+
+  restoreTurn(data: SerializedGameState) {
+    this.readyPlayers = []
+    this.fromJSON(data)
+    this.players.forEach((player) => player.replayMoves())
+    if (this.gameOver) this.tallyScores()
+    this.emitStateChange()
+  }
+
+  restorePlayer(data: SerializedPlayer) {
+    const previous = this.players.find((player) => player.id === data.id)
+    if (!previous) throw new Error('Unknown player')
+    const player = new Player(data, this, data.moveHistory, data.investigateCardCandidates)
+    this.players[this.players.indexOf(previous)] = player
+    this.readyPlayers = this.readyPlayers.filter((ready) => ready !== previous)
+    for (const objective of this.objectives) {
+      objective.firstPlayers = objective.firstPlayers.map((p) => p === previous ? player : p)
+      objective.secondPlayers = objective.secondPlayers.map((p) => p === previous ? player : p)
+    }
+    player.replayMoves()
+    this.emitStateChange()
+    return player
+  }
+
   fromJSON(data: SerializedGameState) {
     this.players = data.players.map((d) => new Player(d, this, d.moveHistory, d.investigateCardCandidates))
+    this.restoreSharedFields(data)
+    this.soloMode = this.players.length === 1
+  }
 
+  private restoreSharedFields(data: SerializedSharedGameState) {
     this.turnHistory = new TurnHistory(this, data.turnHistory)
     this.objectives = data.objectives.map(
       (od) => new Objective(objectives[this.boardName].find((o) => od.id === o.id)!, this, od),
@@ -321,7 +378,6 @@ export class GameState extends EventTarget {
 
     this.era = data.era
     this.currentTurn = data.currentTurn
-    this.soloMode = this.players.length === 1
 
     this.currentExplorerCard = data.currentExplorerCard
       ? new ExplorerCard(explorerCardDataMapping[data.currentExplorerCard.id])
@@ -531,6 +587,15 @@ export class Player extends EventTarget {
     // Earlier investigate-card moves clear this field as they are replayed. Preserve
     // the pending choice from the serialized state and restore it after replay.
     const serializedInvestigateCardCandidates = this.investigateCardCandidates
+    const currentTurnWasConfirmed = this.replayableMoveHistory?.historicalMoves[this.gameState.era]?.[
+      this.gameState.currentTurn
+    ]?.some((move) => move.action === 'confirm-turn')
+
+    // A confirmed turn cannot also have pending moves. Older clients could append
+    // moves after confirmation, so discard those invalid moves while restoring.
+    if (currentTurnWasConfirmed && this.replayableMoveHistory) {
+      this.replayableMoveHistory.currentMoves = []
+    }
 
     this.replaying = true
 
@@ -630,6 +695,8 @@ export class Player extends EventTarget {
   }
 
   selectMove(move: Move, recursive = false) {
+    if (!this.replaying && this.gameState.readyPlayers.includes(this)) return
+
     const autoMoves = this.moveHistory.doMove(move)
 
     for (const am of autoMoves) {
@@ -766,7 +833,13 @@ export class MoveHistory {
 
     if (serializedData) {
       this.historicalMoves = serializedData.historicalMoves.map((hm) =>
-        hm.map((t) => t.map((sm) => this.moveFromJSON(sm))),
+        hm.map((turn) => {
+          if (!turn) return []
+          const confirmationIndex = turn.findIndex((move) => move.action === 'confirm-turn')
+          const validMoves = confirmationIndex < 0 ? turn : turn.slice(0, confirmationIndex + 1)
+
+          return validMoves.map((move) => this.moveFromJSON(move))
+        }),
       )
       this.currentMoves = serializedData.currentMoves.map((sm) => this.moveFromJSON(sm))
     }
@@ -1158,7 +1231,7 @@ export class MoveHistory {
       const totalSize = hexes.length
       const iceSize = hexes.length + iceCount
 
-      const ruleIsWild = this.player.currentCardRules?.[i].terrains.some((t) => t.terrain === 'wild')
+      const ruleIsWild = this.player.currentCardRules?.[i]?.terrains.some((t) => t.terrain === 'wild')
 
       return { hexes, size: ruleIsWild ? totalSize : iceSize, affectedByIce: !ruleIsWild }
     })
@@ -1187,6 +1260,17 @@ export class MoveHistory {
 
     // get any pre-existing moves (prior to treasure card draw, for example)
     const preexistingTurnMoves = this.historicalMoves[this.player.era][this.player.currentTurn] || []
+
+    if (investigateCardChoice?.action === 'choose-investigate-card') {
+      this.gameState.dispatchEvent(new CustomEvent('oninvestigatelocked', { detail: {
+        playerId: this.player.id,
+        era: this.player.era,
+        turn: this.player.currentTurn,
+        moveIndex: preexistingTurnMoves.length + this.currentMoves.indexOf(investigateCardChoice),
+        discardedCard: investigateCardChoice.discardedCard,
+        replaying: this.player.replaying,
+      } }))
+    }
 
     // insert these moves in the corresponding era/turn slot of the historical state for replay purposes
     this.historicalMoves[this.player.era][this.player.currentTurn] = preexistingTurnMoves.concat(this.currentMoves)

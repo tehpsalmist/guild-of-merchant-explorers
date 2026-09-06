@@ -202,13 +202,14 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
 
   return (
     <GameStateProvider
+      serializedGame={savedGame}
       resetGame={() => {
         removeStoredGame(LOCAL_GAME_STORAGE_KEY)
         setBoardName('')
       }}
       storageKey={LOCAL_GAME_STORAGE_KEY}
     >
-      <GameBoard className={className} {...props} />
+      <GameBoard followPlayerTurns className={className} {...props} />
     </GameStateProvider>
   )
 }

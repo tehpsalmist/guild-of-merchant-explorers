@@ -25,8 +25,9 @@ export const PlayerMessage = ({ className = '', activePlayer, ...props }: Player
   const [expanded, setExpanded] = useState(false)
 
   const mode = activePlayer.mode
-  const message =
-    mode === 'exploring'
+  const message = gameState.readyPlayers.includes(activePlayer)
+    ? 'Waiting for the other explorers...'
+    : mode === 'exploring'
       ? gameState.currentExplorerCard?.rules(activePlayer)?.[activePlayer.cardPhase]?.message ??
         'Explore!'
       : messages[mode]

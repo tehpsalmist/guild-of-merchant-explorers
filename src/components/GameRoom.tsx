@@ -37,10 +37,9 @@ import { OnlineGameStateProvider } from '../hooks/useOnlineGameState'
 import { GameStateProvider } from '../hooks/useGameState'
 import { GameBoard } from './GameBoard'
 import {
-  GAME_START_MESSAGE,
+  GAME_STATE_MESSAGE,
   assembleRoomGame,
-  isGameStartMessageData,
-  type GameStartMessageData,
+  isGameStateMessageData,
 } from '../game-logic/room-setup'
 import { useRoomSetup } from '../hooks/useRoomSetup'
 import { ExpeditionButton, expeditionButtonClasses } from '../design-system/ExpeditionButton'
@@ -93,11 +92,11 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     if (!p2pRoom || !room || !gameStorageKey) return
     const hostMember = room.members.find((member) => member.player_id === room.host_id)
 
-    const receiveGameStart = (message: RoomMessage) => {
+    const receiveGameState = (message: RoomMessage) => {
       if (
-        message.type !== GAME_START_MESSAGE ||
+        message.type !== GAME_STATE_MESSAGE ||
         message.memberId !== hostMember?.id ||
-        !isGameStartMessageData(message.data, room.id)
+        !isGameStateMessageData(message.data, room.id)
       ) {
         return
       }
@@ -105,9 +104,9 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
       saveStoredGame(gameStorageKey, message.data.serializedGame)
     }
 
-    p2pRoom.on('message', receiveGameStart)
+    p2pRoom.on('message', receiveGameState)
     return () => {
-      p2pRoom.off('message', receiveGameStart)
+      p2pRoom.off('message', receiveGameState)
     }
   }, [gameStorageKey, p2pRoom, room])
 
@@ -257,10 +256,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const startGame = () => {
     if (!isHost || !assembledGame?.inputs || !hasRoomSession || !p2pRoom || !gameStorageKey) return
     const serializedGame = JSON.stringify(new GameState(assembledGame.inputs))
-    const gameStart: GameStartMessageData = { roomId: room.id, serializedGame }
 
     saveStoredGame(gameStorageKey, serializedGame)
-    p2pRoom.broadcast(GAME_START_MESSAGE, gameStart)
   }
 
   const isMemberConnected = (member: (typeof room.members)[number]) =>
@@ -293,6 +290,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     return (
       <GameStateProvider
         key={room.id}
+        serializedGame={savedGame}
+        autoAdvance={isHost}
         storageKey={gameStorageKey}
         resetGame={() => removeStoredGame(gameStorageKey)}
       >

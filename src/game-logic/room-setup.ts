@@ -9,7 +9,7 @@ export interface RoomSetup {
 
 export const GAME_SETUP_MESSAGE = 'game-setup'
 export const GAME_SETUP_COLOR_MESSAGE = 'game-setup-color'
-export const GAME_START_MESSAGE = 'game-start'
+export const GAME_STATE_MESSAGE = 'game-state'
 
 export const EXPLORER_COLORS = [
   'hue-rotate-[310deg] saturate-[7] brightness-[0.7]',
@@ -37,7 +37,7 @@ export interface GameSetupColorMessageData {
   color: string
 }
 
-export interface GameStartMessageData {
+export interface GameStateMessageData {
   roomId: number
   serializedGame: string
 }
@@ -71,7 +71,7 @@ export function isGameSetupColorMessageData(value: unknown): value is GameSetupC
   )
 }
 
-export function isGameStartMessageData(value: unknown, roomId: number): value is GameStartMessageData {
+export function isGameStateMessageData(value: unknown, roomId: number): value is GameStateMessageData {
   return (
     !!value &&
     typeof value === 'object' &&
