@@ -100,6 +100,12 @@ export class P2PConnection extends EventEmitter<PeerEvents> {
     if (this.peer && !this.peer.destroyed) this.peer.addStream(stream)
   }
 
+  removeStream(stream: MediaStream) {
+    if (!this.localStreams.delete(stream)) return
+
+    if (this.peer && !this.peer.destroyed) this.peer.removeStream(stream)
+  }
+
   destroy() {
     if (this.destroyed) return
 

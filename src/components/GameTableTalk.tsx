@@ -1,9 +1,10 @@
 import clsx from 'clsx'
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, MicrophoneIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ExpeditionButton } from '../design-system/ExpeditionButton'
 import type { P2PRoom } from '../p2p-connection/p2p-room'
 import { usePlayerList } from '../hooks/usePlayerList'
+import { toast } from '@8thday/react'
 
 interface ChatMessage {
   memberId: number
@@ -17,8 +18,15 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [peerStates, setPeerStates] = useState<Record<number, string>>({})
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [voiceChanging, setVoiceChanging] = useState(false)
+  const [voiceStates, setVoiceStates] = useState<Record<number, boolean>>({})
   const messagesRef = useRef<HTMLDivElement>(null)
   const openRef = useRef(false)
+  const voiceEnabledRef = useRef(false)
+  const voiceStatesRef = useRef<Record<number, boolean>>({})
+  const localStreamRef = useRef<MediaStream>()
+  const remoteAudioRef = useRef(new Map<number, HTMLAudioElement>())
   const { userLookup } = usePlayerList()
   const membersById = Object.fromEntries(p2pRoom.members.map((member) => [member.id, member]))
   const connectedPeerCount = Object.values(peerStates).filter((state) => state === 'connected').length
@@ -30,6 +38,25 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
       : canChat
         ? `Chat connected with ${connectedPeerCount} ${connectedPeerCount === 1 ? 'explorer' : 'explorers'}`
         : 'Waiting for another explorer to connect'
+  const currentMember = p2pRoom.members.find((member) => member.id === p2pRoom.myId)
+  const currentUserId = currentMember?.player_id
+
+  const stopRemoteAudio = (memberId?: number) => {
+    const entries = memberId === undefined
+      ? [...remoteAudioRef.current.entries()]
+      : [[memberId, remoteAudioRef.current.get(memberId)] as const]
+    entries.forEach(([id, audio]) => {
+      if (!audio) return
+      audio.pause()
+      audio.srcObject = null
+      remoteAudioRef.current.delete(id)
+    })
+  }
+
+  const setMemberVoiceState = (memberId: number, enabled: boolean) => {
+    voiceStatesRef.current = { ...voiceStatesRef.current, [memberId]: enabled }
+    setVoiceStates(voiceStatesRef.current)
+  }
 
   useEffect(() => {
     openRef.current = open
@@ -41,17 +68,65 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
       setMessages((current) => [...current, { memberId: id, message, sentAt: new Date() }])
       if (!openRef.current) setUnreadCount((count) => Math.min(count + 1, 99))
     })
-    const updatePeerState = ({ memberId, state }: { memberId: number; state: string }) => {
+    const updatePeerState = ({ userId, memberId, state }: { userId: string; memberId: number; state: string }) => {
       setPeerStates((states) => ({ ...states, [memberId]: state }))
+      if (state !== 'connected') {
+        setMemberVoiceState(memberId, false)
+        const stream = localStreamRef.current
+        if (stream) p2pRoom.removeStreamFrom(userId, stream)
+        stopRemoteAudio(memberId)
+        return
+      }
+      p2pRoom.sendTo(userId, 'voice-state', { enabled: voiceEnabledRef.current })
+      const stream = localStreamRef.current
+      if (stream && voiceStatesRef.current[memberId]) p2pRoom.addStreamTo(userId, stream)
+    }
+    const updateVoiceState = ({ userId, memberId, data }: { userId: string; memberId: number; data: unknown }) => {
+      if (!data || typeof data !== 'object' || !('enabled' in data) || typeof data.enabled !== 'boolean') return
+      const enabled = data.enabled
+      setMemberVoiceState(memberId, enabled)
+      const stream = localStreamRef.current
+      if (stream && voiceEnabledRef.current) {
+        if (enabled) p2pRoom.addStreamTo(userId, stream)
+        else p2pRoom.removeStreamFrom(userId, stream)
+      }
+      if (!enabled) stopRemoteAudio(memberId)
+    }
+    const receiveVoiceState = (message: Parameters<typeof updateVoiceState>[0] & { type: string }) => {
+      if (message.type === 'voice-state') updateVoiceState(message)
+    }
+    const receiveStream = ({ memberId, stream }: { memberId: number; stream: MediaStream }) => {
+      if (!voiceEnabledRef.current) return
+      stopRemoteAudio(memberId)
+      const audio = new Audio()
+      audio.autoplay = true
+      audio.srcObject = stream
+      remoteAudioRef.current.set(memberId, audio)
+      audio.play().catch(() => undefined)
     }
     p2pRoom.on('peer-state', updatePeerState)
+    p2pRoom.on('message', receiveVoiceState)
+    p2pRoom.on('stream', receiveStream)
     setPeerStates(Object.fromEntries(p2pRoom.getPeers().map(({ memberId, state }) => [memberId, state])))
 
     return () => {
       receiveMessages()
       p2pRoom.off('peer-state', updatePeerState)
+      p2pRoom.off('message', receiveVoiceState)
+      p2pRoom.off('stream', receiveStream)
     }
   }, [p2pRoom])
+
+  useEffect(() => () => {
+    voiceEnabledRef.current = false
+    p2pRoom.broadcast('voice-state', { enabled: false })
+    const stream = localStreamRef.current
+    if (stream) {
+      p2pRoom.getPeers().forEach(({ userId }) => p2pRoom.removeStreamFrom(userId, stream))
+      stream.getTracks().forEach((track) => track.stop())
+    }
+    stopRemoteAudio()
+  }, [currentUserId, p2pRoom])
 
   useEffect(() => {
     if (!open) return
@@ -68,6 +143,41 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
     p2pRoom.sendMessages(message)
     setMessages((current) => [...current, { memberId: p2pRoom.myId, message, sentAt: new Date() }])
     setDraft('')
+  }
+
+  const toggleVoice = async () => {
+    if (voiceChanging) return
+    if (voiceEnabledRef.current) {
+      voiceEnabledRef.current = false
+      setVoiceEnabled(false)
+      setMemberVoiceState(p2pRoom.myId, false)
+      p2pRoom.broadcast('voice-state', { enabled: false })
+      const stream = localStreamRef.current
+      localStreamRef.current = undefined
+      if (stream) {
+        p2pRoom.getPeers().forEach(({ userId }) => p2pRoom.removeStreamFrom(userId, stream))
+        stream.getTracks().forEach((track) => track.stop())
+      }
+      stopRemoteAudio()
+      return
+    }
+
+    setVoiceChanging(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      localStreamRef.current = stream
+      voiceEnabledRef.current = true
+      setVoiceEnabled(true)
+      setMemberVoiceState(p2pRoom.myId, true)
+      p2pRoom.getPeers().forEach(({ userId, memberId, state }) => {
+        if (state === 'connected' && voiceStatesRef.current[memberId]) p2pRoom.addStreamTo(userId, stream)
+      })
+      p2pRoom.broadcast('voice-state', { enabled: true })
+    } catch {
+      toast.error({ message: 'Microphone unavailable', description: 'Allow microphone access to use voice chat.' })
+    } finally {
+      setVoiceChanging(false)
+    }
   }
 
   return (
@@ -119,6 +229,23 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
               </div>
               <button
                 type="button"
+                className={clsx(
+                  'relative flex h-9 w-9 items-center justify-center rounded-full border transition focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50',
+                  voiceEnabled
+                    ? 'border-emerald-300/50 bg-emerald-500/25 text-emerald-200'
+                    : 'border-amber-100/15 text-amber-100/60 hover:bg-slate-900 hover:text-amber-50',
+                )}
+                onClick={toggleVoice}
+                disabled={voiceChanging}
+                aria-pressed={voiceEnabled}
+                aria-label={voiceEnabled ? 'Disable voice chat' : 'Enable voice chat'}
+                title={voiceEnabled ? 'Voice chat on' : 'Voice chat off'}
+              >
+                <MicrophoneIcon className="h-5 w-5" aria-hidden="true" />
+                {!voiceEnabled && <span className="absolute h-px w-6 rotate-45 bg-current" aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 text-amber-100/60 transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
                 onClick={() => setOpen(false)}
                 aria-label="Close table talk"
@@ -126,6 +253,18 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </header>
+            <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-b border-amber-100/10 px-4 py-2 text-xs text-amber-100/55">
+              {p2pRoom.members.filter((member) => member.invite_accepted).map((member) => {
+                const player = userLookup[member.player_id]
+                const isMine = member.id === p2pRoom.myId
+                return (
+                  <span key={member.id} className="inline-flex min-w-0 items-center gap-1">
+                    <span className="max-w-32 truncate">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}</span>
+                    {voiceStates[member.id] && <MicrophoneIcon className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-label="Voice enabled" />}
+                  </span>
+                )
+              })}
+            </div>
             <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3">
               {messages.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-8 text-center">
@@ -154,7 +293,7 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
                         <div className={clsx('max-w-[88%]', isMine && 'text-right')}>
                           {(!followsSameSender || showTimestamp) && (
                             <div className="mb-1 flex items-baseline gap-2 px-1">
-                              {!followsSameSender && <span className="truncate text-xs font-bold text-amber-100/60">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}</span>}
+                              {!followsSameSender && <span className="inline-flex items-center gap-1 truncate text-xs font-bold text-amber-100/60">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}{voiceStates[chatMessage.memberId] && <MicrophoneIcon className="h-3 w-3 shrink-0 text-emerald-300" aria-label="Voice enabled" />}</span>}
                               {showTimestamp && <time className="text-[0.65rem] text-amber-100/30" dateTime={chatMessage.sentAt.toISOString()}>{formatMessageTime(chatMessage.sentAt)}</time>}
                             </div>
                           )}

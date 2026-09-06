@@ -71,10 +71,12 @@ export interface SerializedGameState {
 }
 
 export type SerializedSharedGameState = Omit<SerializedGameState, 'players' | 'objectives'> & {
-  objectives: Array<Omit<SerializedObjective, 'firstPlayers' | 'secondPlayers'> & {
-    firstPlayers: Array<{ id: string }>
-    secondPlayers: Array<{ id: string }>
-  }>
+  objectives: Array<
+    Omit<SerializedObjective, 'firstPlayers' | 'secondPlayers'> & {
+      firstPlayers: Array<{ id: string }>
+      secondPlayers: Array<{ id: string }>
+    }
+  >
 }
 
 export interface GameInputs {
@@ -267,7 +269,7 @@ export class GameState extends EventTarget {
   }
 
   emitPlayerTurn(playerId: string) {
-    this.dispatchEvent(new CustomEvent('onplayerturn', {detail:{playerId}}))
+    this.dispatchEvent(new CustomEvent('onplayerturn', { detail: { playerId } }))
   }
 
   enqueueSerialization() {
@@ -329,12 +331,19 @@ export class GameState extends EventTarget {
   }
 
   restoreSharedState(data: SerializedSharedGameState) {
-    const rewards = (player: Player) => this.objectives.reduce((sum, objective) => sum +
-      (objective.firstPlayers.includes(player) ? objective.firstPlaceReward : 0) +
-      (objective.secondPlayers.includes(player) ? objective.secondPlaceReward : 0), 0)
+    const rewards = (player: Player) =>
+      this.objectives.reduce(
+        (sum, objective) =>
+          sum +
+          (objective.firstPlayers.includes(player) ? objective.firstPlaceReward : 0) +
+          (objective.secondPlayers.includes(player) ? objective.secondPlaceReward : 0),
+        0,
+      )
     const previousRewards = this.players.map(rewards)
     this.restoreSharedFields(data)
-    this.players.forEach((player, index) => { player.coins += rewards(player) - previousRewards[index] })
+    this.players.forEach((player, index) => {
+      player.coins += rewards(player) - previousRewards[index]
+    })
     this.emitStateChange()
   }
 
@@ -353,10 +362,10 @@ export class GameState extends EventTarget {
     this.players[this.players.indexOf(previous)] = player
     this.readyPlayers = this.readyPlayers.filter((ready) => ready !== previous)
     for (const objective of this.objectives) {
-      objective.firstPlayers = objective.firstPlayers.map((p) => p === previous ? player : p)
-      objective.secondPlayers = objective.secondPlayers.map((p) => p === previous ? player : p)
+      objective.firstPlayers = objective.firstPlayers.map((p) => (p === previous ? player : p))
+      objective.secondPlayers = objective.secondPlayers.map((p) => (p === previous ? player : p))
     }
-    player.replayMoves()
+    player.replayMoves(snapshotMoveHistory(previous.moveHistory))
     this.emitStateChange()
     return player
   }
@@ -449,6 +458,9 @@ export interface SerializedPlayer {
   investigateCardCandidates: [SerializedCard, SerializedCard] | null
 }
 
+const snapshotMoveHistory = (moveHistory: MoveHistory): SerializedMoveHistory =>
+  JSON.parse(JSON.stringify(moveHistory)) as SerializedMoveHistory
+
 export type PlayerMode =
   | 'exploring'
   | 'free-exploring' // treasure card block is "free" because it defies all rules
@@ -479,6 +491,9 @@ export class Player extends EventTarget {
 
   replayableMoveHistory?: MoveHistory
   replaying = false
+  // A remote snapshot is rebuilt from its complete history. Only moves that were
+  // not in the prior snapshot should make noise while doing that rebuild.
+  replayingEffects = false
   replayingExplorerCard?: ExplorerCard
   replayEra = 0
   replayTurn = 0
@@ -537,7 +552,7 @@ export class Player extends EventTarget {
   addCoins(amount: number, soundDelay = 0) {
     this.coins += amount
 
-    if (!this.replaying) {
+    if (!this.replaying || this.replayingEffects) {
       audioTools.playAfterDelay(coin1Sound, soundDelay)
     }
   }
@@ -546,7 +561,7 @@ export class Player extends EventTarget {
   removeCoins(amount: number, soundDelay = 0) {
     this.coins -= amount
 
-    if (!this.replaying) {
+    if (!this.replaying || this.replayingEffects) {
       audioTools.playAfterDelay(coin2Sound, soundDelay)
     }
   }
@@ -564,11 +579,11 @@ export class Player extends EventTarget {
   }
 
   get era() {
-    return this.replaying ? this.replayEra ?? this.gameState.era : this.gameState.era
+    return this.replaying ? (this.replayEra ?? this.gameState.era) : this.gameState.era
   }
 
   get currentTurn() {
-    return this.replaying ? this.replayTurn ?? this.gameState.currentTurn : this.gameState.currentTurn
+    return this.replaying ? (this.replayTurn ?? this.gameState.currentTurn) : this.gameState.currentTurn
   }
 
   get currentExplorerCard(): ExplorerCard | null {
@@ -583,7 +598,7 @@ export class Player extends EventTarget {
     return this.currentExplorerCard?.rules(this)
   }
 
-  replayMoves() {
+  replayMoves(previousMoveHistory?: SerializedMoveHistory) {
     // Earlier investigate-card moves clear this field as they are replayed. Preserve
     // the pending choice from the serialized state and restore it after replay.
     const serializedInvestigateCardCandidates = this.investigateCardCandidates
@@ -621,7 +636,10 @@ export class Player extends EventTarget {
 
         this.replayingExplorerCard = new ExplorerCard(explorerCardDataMapping[cardId])
 
-        historicalTurn.forEach((historicalMove) => {
+        historicalTurn.forEach((historicalMove, k) => {
+          this.replayingEffects =
+            !!previousMoveHistory &&
+            JSON.stringify(previousMoveHistory.historicalMoves[i]?.[j]?.[k]) !== JSON.stringify(historicalMove)
           this.moveHistory.doMove(historicalMove)
         })
       })
@@ -629,11 +647,13 @@ export class Player extends EventTarget {
 
     this.replayingExplorerCard = undefined
 
-    this.replayableMoveHistory?.currentMoves.forEach((move) => {
+    this.replayableMoveHistory?.currentMoves.forEach((move, i) => {
+      this.replayingEffects =
+        !!previousMoveHistory && JSON.stringify(previousMoveHistory.currentMoves[i]) !== JSON.stringify(move)
       this.moveHistory.doMove(move)
     })
 
-    this.replaying = false
+    this.replayingEffects = false
 
     // add up objectives earned
     this.gameState.objectives.forEach((objective) => {
@@ -645,6 +665,8 @@ export class Player extends EventTarget {
         this.addCoins(objective.secondPlaceReward)
       }
     })
+
+    this.replaying = false
 
     this.replayableMoveHistory = undefined
     this.investigateCardCandidates = serializedInvestigateCardCandidates
@@ -1242,7 +1264,7 @@ export class MoveHistory {
   }
 
   playAudio(sfx: HTMLAudioElement) {
-    if (this.player.replaying) {
+    if (this.player.replaying && !this.player.replayingEffects) {
       return
     }
 
@@ -1262,14 +1284,18 @@ export class MoveHistory {
     const preexistingTurnMoves = this.historicalMoves[this.player.era][this.player.currentTurn] || []
 
     if (investigateCardChoice?.action === 'choose-investigate-card') {
-      this.gameState.dispatchEvent(new CustomEvent('oninvestigatelocked', { detail: {
-        playerId: this.player.id,
-        era: this.player.era,
-        turn: this.player.currentTurn,
-        moveIndex: preexistingTurnMoves.length + this.currentMoves.indexOf(investigateCardChoice),
-        discardedCard: investigateCardChoice.discardedCard,
-        replaying: this.player.replaying,
-      } }))
+      this.gameState.dispatchEvent(
+        new CustomEvent('oninvestigatelocked', {
+          detail: {
+            playerId: this.player.id,
+            era: this.player.era,
+            turn: this.player.currentTurn,
+            moveIndex: preexistingTurnMoves.length + this.currentMoves.indexOf(investigateCardChoice),
+            discardedCard: investigateCardChoice.discardedCard,
+            replaying: this.player.replaying,
+          },
+        }),
+      )
     }
 
     // insert these moves in the corresponding era/turn slot of the historical state for replay purposes

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import React, { ComponentProps, useEffect, useState } from 'react'
+import React, { ComponentProps, useEffect, useRef, useState } from 'react'
 import { useGameState } from '../hooks/useGameState'
 import { ExplorerMap } from './ExplorerMap'
 import { toast, useEventListener } from '@8thday/react'
@@ -91,6 +91,7 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, ...props 
   const [userPromptOpen, setUserPromptOpen] = useState(false)
   const [scoreBoardOpen, setScoreBoardOpen] = useState(false)
   const [viewedPlayerId, setViewedPlayerId] = useState<string>()
+  const knownTreasureCards = useRef<Record<string, string[]>>({})
   const updateState = useState(0)[1]
 
   const { gameState, resetGame, storageKey } = useGameState()
@@ -168,6 +169,19 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, ...props 
 
     return () => activePlayer.removeEventListener('treasure-gained', treasureListener)
   }, [viewedPlayer, canControlViewedPlayer])
+
+  // A remote draw arrives as a reconstructed player snapshot, after the
+  // treasure-gained event occurred during replay. Detect the newly added card
+  // in that snapshot so the owning non-host still sees its card dialog.
+  useEffect(() => {
+    const cards = viewedPlayer.treasureCards.cards
+    const previous = knownTreasureCards.current[viewedPlayer.id]
+    const cardIds = cards.map(({ card }) => card.id)
+    knownTreasureCards.current[viewedPlayer.id] = cardIds
+    if (!previous || (onlineGame && viewedPlayer.id !== userId)) return
+    const addedCard = cards.find(({ card }) => !previous.includes(card.id))
+    if (addedCard) setNewTreasureCard({ card: addedCard.card, playerName: viewedPlayer.displayName })
+  }, [viewedPlayer, onlineGame, userId])
 
   useEffect(() => {
     if (!canControlViewedPlayer) {

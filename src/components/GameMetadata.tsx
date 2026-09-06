@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import React, { ComponentType, SVGProps, useEffect, useState } from 'react'
+import React, { ComponentType, SVGProps, useEffect, useRef, useState } from 'react'
 import { HomeIcon } from '@heroicons/react/24/outline'
 import { Button } from '@8thday/react'
 import { useNavigate } from 'react-router-dom'
@@ -205,6 +205,7 @@ const PlayerStuffButton = ({
 export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; chat?: React.ReactNode }) => {
   const { gameState } = useGameState()
   const [openCategory, setOpenCategory] = useState<MetadataCategory | null>(null)
+  const objectiveAwards = useRef<string>()
 
   const player = viewedPlayer
   const activeInvestigateCard = gameState.currentExplorerCard?.isEraCard
@@ -213,7 +214,7 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
   const activeCardImage =
     player.mode === 'free-exploring'
       ? placeBlock
-      : activeInvestigateCard?.imageUrl ?? gameState.currentExplorerCard?.imageUrl
+      : (activeInvestigateCard?.imageUrl ?? gameState.currentExplorerCard?.imageUrl)
 
   useEffect(() => {
     const showObjectives = () => setOpenCategory('objectives')
@@ -223,10 +224,26 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
       gameState.players.forEach((candidate) => candidate.removeEventListener('objective-achieved', showObjectives))
   }, [gameState.players])
 
+  // Remote turn snapshots rebuild objective instances, so their original event
+  // has already fired before this component can subscribe. Notice new awards
+  // from the restored state as well.
+  useEffect(() => {
+    const awards = gameState.objectives
+      .map(
+        (objective) =>
+          `${objective.id}:${objective.firstPlayers.map((player) => player.id)}:${objective.secondPlayers.map((player) => player.id)}`,
+      )
+      .join('|')
+    if (objectiveAwards.current !== undefined && objectiveAwards.current !== awards) setOpenCategory('objectives')
+    objectiveAwards.current = awards
+  })
+
   useEffect(() => {
     const openFromKeyboard = (event: KeyboardEvent) => {
-      if (event.key === 'w') setOpenCategory('objectives')
-      if (event.key === 'd') setOpenCategory('player')
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (!event.shiftKey) return
+      if (event.key.toLowerCase() === 'w') setOpenCategory('objectives')
+      if (event.key.toLowerCase() === 'd') setOpenCategory('player')
     }
 
     window.addEventListener('keydown', openFromKeyboard)
@@ -289,9 +306,7 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
         </div>
       </nav>
 
-      {openCategory === 'active-card' && (
-        <ExplorerMatModal player={player} onClose={() => setOpenCategory(null)} />
-      )}
+      {openCategory === 'active-card' && <ExplorerMatModal player={player} onClose={() => setOpenCategory(null)} />}
       {openCategory === 'home' && <HomeDialog onClose={() => setOpenCategory(null)} />}
       {openCategory === 'player' && <PlayerStuffDialog player={player} onClose={() => setOpenCategory(null)} />}
       {openCategory === 'objectives' && <ObjectivesDialog onClose={() => setOpenCategory(null)} />}
@@ -336,6 +351,11 @@ const HomeDialog = ({ onClose }: { onClose(): void }) => {
               <span className="block text-lg font-black">Multiplayer Lobby</span>
               <span className="block text-sm text-slate-600">Game stays saved.</span>
             </button>
+          </div>
+
+          <div className="hidden pointer-fine:block mt-4 rounded-lg border border-amber-100/20 bg-black/20 px-3 py-2 text-sm text-amber-50/80">
+            <p className="font-bold text-amber-50">Keyboard shortcuts</p>
+            <p>Shift + W: objectives · Shift + D: player details · Ctrl/Cmd + Z: undo · Esc: close dialogs</p>
           </div>
 
           <a

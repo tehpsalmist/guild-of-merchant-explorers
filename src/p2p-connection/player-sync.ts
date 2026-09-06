@@ -1,4 +1,9 @@
-import type { GameState, SerializedGameState, SerializedSharedGameState, SerializedPlayer } from '../game-logic/GameState'
+import type {
+  GameState,
+  SerializedGameState,
+  SerializedSharedGameState,
+  SerializedPlayer,
+} from '../game-logic/GameState'
 import type { InvestigateCard } from '../game-logic/Cards'
 import type { P2PRoom, RoomMessage } from './p2p-room'
 
@@ -16,10 +21,18 @@ interface SharedMessage {
 function isSharedMessage(data: unknown): data is SharedMessage {
   if (!data || typeof data !== 'object') return false
   const value = data as SharedMessage
-  return typeof value.fromTurn === 'string' && Number.isInteger(value.roomId) &&
-    !!value.state && Number.isInteger(value.state.era) && Number.isInteger(value.state.currentTurn) &&
-    Array.isArray(value.state.objectives) && !!value.state.turnHistory &&
-    !!value.state.explorerDeck && !!value.state.investigateDeck && !!value.state.treasureDeck
+  return (
+    typeof value.fromTurn === 'string' &&
+    Number.isInteger(value.roomId) &&
+    !!value.state &&
+    Number.isInteger(value.state.era) &&
+    Number.isInteger(value.state.currentTurn) &&
+    Array.isArray(value.state.objectives) &&
+    !!value.state.turnHistory &&
+    !!value.state.explorerDeck &&
+    !!value.state.investigateDeck &&
+    !!value.state.treasureDeck
+  )
 }
 
 const turnKey = (game: { era: number; currentTurn: number; gameOver: boolean }) =>
@@ -35,17 +48,21 @@ interface PlayerMessage {
 function isPlayerMessage(data: unknown): data is PlayerMessage {
   if (!data || typeof data !== 'object') return false
   const value = data as PlayerMessage
-  return Number.isInteger(value.era) && Number.isInteger(value.turn) &&
+  return (
+    Number.isInteger(value.era) &&
+    Number.isInteger(value.turn) &&
     typeof value.player?.id === 'string' &&
     Array.isArray(value.player.moveHistory?.historicalMoves) &&
     Array.isArray(value.player.moveHistory?.currentMoves)
+  )
 }
 
 export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pending: boolean) => void) {
   const userId = room.members.find((member) => member.id === room.myId)?.player_id
   const isHost = userId === room.host_id
   const ownPlayer = () => game.players.find((player) => player.id === userId)
-  const snapshot = (player: SerializedPlayer): SerializedPlayer => JSON.parse(JSON.stringify(player)) as SerializedPlayer
+  const snapshot = (player: SerializedPlayer): SerializedPlayer =>
+    JSON.parse(JSON.stringify(player)) as SerializedPlayer
   let lastOwnState = JSON.stringify(ownPlayer())
   let sharedTurn = turnKey(game)
   let lastSharedState = JSON.stringify(game.toSharedJSON())
@@ -57,14 +74,20 @@ export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pe
     const fromTurn = sharedTurn
     sharedTurn = turnKey(game)
     lastSharedState = JSON.stringify(game.toSharedJSON())
-    room.broadcast(TURN_STATE, { roomId: room.id, fromTurn, state: JSON.parse(JSON.stringify(game)) as SerializedGameState })
+    room.broadcast(TURN_STATE, {
+      roomId: room.id,
+      fromTurn,
+      state: JSON.parse(JSON.stringify(game)) as SerializedGameState,
+    })
   }
   const broadcastShared = () => {
     const serialized = JSON.stringify(game.toSharedJSON())
     if (serialized === lastSharedState) return
     lastSharedState = serialized
     room.broadcast(SHARED_GAME_STATE, {
-      roomId: room.id, fromTurn: sharedTurn, state: JSON.parse(serialized) as SerializedSharedGameState,
+      roomId: room.id,
+      fromTurn: sharedTurn,
+      state: JSON.parse(serialized) as SerializedSharedGameState,
     } satisfies SharedMessage)
   }
   const publishPlayer = (player: SerializedPlayer, drawResult = false) => {
@@ -91,15 +114,23 @@ export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pe
     lastOwnState = serialized
     publishPlayer(player)
   }
-  const onLocked = { handleEvent(event: CustomEvent<{
-    playerId: string; era: number; turn: number; moveIndex: number
-    discardedCard: InvestigateCard; replaying: boolean
-  }>) {
-    const lock = event.detail
-    if (!isHost || !lock.replaying || previousPlayer?.id !== lock.playerId) return
-    const oldMove = previousPlayer.moveHistory.historicalMoves[lock.era]?.[lock.turn]?.[lock.moveIndex]
-    if (oldMove?.action !== 'choose-investigate-card') game.investigateDeck.discard(lock.discardedCard)
-  } }
+  const onLocked = {
+    handleEvent(
+      event: CustomEvent<{
+        playerId: string
+        era: number
+        turn: number
+        moveIndex: number
+        discardedCard: InvestigateCard
+        replaying: boolean
+      }>,
+    ) {
+      const lock = event.detail
+      if (!isHost || !lock.replaying || previousPlayer?.id !== lock.playerId) return
+      const oldMove = previousPlayer.moveHistory.historicalMoves[lock.era]?.[lock.turn]?.[lock.moveIndex]
+      if (oldMove?.action !== 'choose-investigate-card') game.investigateDeck.discard(lock.discardedCard)
+    },
+  }
   const draw = (playerId: string) => {
     const player = game.players.find((candidate) => candidate.id === playerId)
     if (!player || player.treasureCardsToDraw <= 0 || game.readyPlayers.includes(player)) return
@@ -173,7 +204,9 @@ export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pe
         // Include all optimistic moves, even if the serialization timer hasn't fired.
         lastOwnState = JSON.stringify(player)
         room.sendTo(room.host_id, DRAW_TREASURE, {
-          era: game.era, turn: game.currentTurn, player: snapshot(player),
+          era: game.era,
+          turn: game.currentTurn,
+          player: snapshot(player),
         } satisfies PlayerMessage)
       }
     },

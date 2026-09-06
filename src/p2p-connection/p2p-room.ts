@@ -19,8 +19,15 @@ export interface RoomMessage<T = unknown> extends PeerMessage<T> {
   memberId: number
 }
 
+export interface RoomStream {
+  userId: string
+  memberId: number
+  stream: MediaStream
+}
+
 type RoomEvents = {
   message: [RoomMessage]
+  stream: [RoomStream]
   'peer-state': [RoomPeer]
   'session-lost': [string]
 }
@@ -116,6 +123,11 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
 
       const connection = new P2PConnection(this.myId, member.id, this.id, this.sessionId, this.nhost, this.apollo)
       connection.on('message', (message) => this.receive(member, message))
+      connection.on('stream', (stream) => this.emit('stream', {
+        userId: member.player_id,
+        memberId: member.id,
+        stream,
+      }))
       connection.on('handshake-state', (state) => {
         this.emit('peer-state', { userId: member.player_id, memberId: member.id, state })
       })
@@ -149,6 +161,16 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
     const message = { id: createId(), type, data }
     for (const connection of this.connections.values()) connection.sendMessage(message)
     return message.id
+  }
+
+  addStreamTo(userId: string, stream: MediaStream) {
+    const member = this.members.find((candidate) => candidate.player_id === userId)
+    if (member) this.connections.get(member.id)?.addStream(stream)
+  }
+
+  removeStreamFrom(userId: string, stream: MediaStream) {
+    const member = this.members.find((candidate) => candidate.player_id === userId)
+    if (member) this.connections.get(member.id)?.removeStream(stream)
   }
 
   onMessages(listener: (message: { id: number; message: string }) => void) {
