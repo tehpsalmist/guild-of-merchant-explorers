@@ -11,6 +11,7 @@ import {
   type GameSetupMessageData,
   type RoomSetup,
 } from '../game-logic/room-setup'
+import { useRememberedState } from '@8thday/react'
 
 type Room = NonNullable<RoomSubSubscription['room_by_pk']>
 
@@ -20,13 +21,15 @@ export const useRoomSetup = (
   userId: string | undefined,
   p2pRoom: P2PRoom | undefined,
 ) => {
-  const [roomSetup, setRoomSetup] = useState<RoomSetup>({ roomId: requestedRoomId, boardName: '', colors: {} })
+  const [roomSetup, setRoomSetup] = useRememberedState<RoomSetup>(`room-setup-state-${requestedRoomId}`, {
+    roomId: requestedRoomId,
+    boardName: '',
+    colors: {},
+  })
   const [colorError, setColorError] = useState<string>()
   const roomSetupRef = useRef(roomSetup)
   const setup =
-    roomSetup.roomId === requestedRoomId
-      ? roomSetup
-      : { roomId: requestedRoomId, boardName: '' as const, colors: {} }
+    roomSetup.roomId === requestedRoomId ? roomSetup : { roomId: requestedRoomId, boardName: '' as const, colors: {} }
   roomSetupRef.current = setup
 
   const commitSetup = (nextSetup: RoomSetup) => {

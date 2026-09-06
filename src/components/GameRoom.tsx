@@ -3,7 +3,6 @@ import React, {
   FormEvent,
   KeyboardEvent,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,7 +23,7 @@ import {
   UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { P2PRoom, RoomSessionError } from '../p2p-connection/p2p-room'
+import { P2PRoom, RoomSessionError, type RoomMessage } from '../p2p-connection/p2p-room'
 import { useNhostClient, useUserId } from '@nhost/react'
 import { useApolloClient } from '@apollo/client'
 import clsx from 'clsx'
@@ -33,11 +32,16 @@ import { HostControls } from './HostControls'
 import { ColorPicker } from './ColorPicker'
 import { ExplorerBlock } from './ExplorerBlock'
 import { RoomBoardPicker } from './RoomBoardPicker'
-import type { GameInputs } from '../game-logic/GameState'
+import { GameState } from '../game-logic/GameState'
 import { OnlineGameStateProvider } from '../hooks/useOnlineGameState'
-import { useGameNavigation } from '../hooks/useGameNavigation'
+import { GameStateProvider } from '../hooks/useGameState'
 import { GameBoard } from './GameBoard'
-import { assembleRoomGame } from '../game-logic/room-setup'
+import {
+  GAME_START_MESSAGE,
+  assembleRoomGame,
+  isGameStartMessageData,
+  type GameStartMessageData,
+} from '../game-logic/room-setup'
 import { useRoomSetup } from '../hooks/useRoomSetup'
 import { ExpeditionButton, expeditionButtonClasses } from '../design-system/ExpeditionButton'
 import { CLOSE_ROOM } from '../graphql/mutations'
@@ -45,6 +49,7 @@ import { toast } from '@8thday/react'
 import { getGraphqlErrorMessage } from '../graphql/utils'
 
 import type { PeerState } from '../p2p-connection/p2p-connection'
+import { onlineGameStorageKey, removeStoredGame, saveStoredGame, useStoredGame } from '../hooks/useStoredGame'
 
 interface ChatMessage {
   message: string
@@ -56,12 +61,6 @@ export interface GameRoomProps extends ComponentProps<'main'> {}
 
 export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const [p2pRoom, setP2PRoom] = useState<P2PRoom>()
-  const [startedGame, setStartedGame] = useState<{
-    roomId: number
-    inputs: Required<GameInputs>
-    p2pRoom: P2PRoom
-  }>()
-  const setGameActive = useGameNavigation()
   const [sessionError, setSessionError] = useState<string>()
   const [sessionRetry, setSessionRetry] = useState(0)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -79,17 +78,38 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const userId = useUserId()
   const { userLookup } = usePlayerList()
   const numericRoomId = Number(roomId)
+  const gameStorageKey = Number.isInteger(numericRoomId) ? onlineGameStorageKey(numericRoomId) : null
+  const savedGame = useStoredGame(gameStorageKey)
   const { data } = useAuthSubscription(ROOM_SUB, {
     variables: { roomId: numericRoomId },
     skip: !Number.isInteger(numericRoomId),
   })
   const room = data?.room_by_pk
-  const gameActive = !!startedGame && startedGame.roomId === room?.id
-  useLayoutEffect(() => {
-    setGameActive(gameActive)
-    return () => setGameActive(false)
-  }, [gameActive, setGameActive])
+  const gameActive = savedGame !== null
+
   const { setup, colorError, chooseBoard, chooseColor } = useRoomSetup(room, numericRoomId, userId, p2pRoom)
+
+  useEffect(() => {
+    if (!p2pRoom || !room || !gameStorageKey) return
+    const hostMember = room.members.find((member) => member.player_id === room.host_id)
+
+    const receiveGameStart = (message: RoomMessage) => {
+      if (
+        message.type !== GAME_START_MESSAGE ||
+        message.memberId !== hostMember?.id ||
+        !isGameStartMessageData(message.data, room.id)
+      ) {
+        return
+      }
+
+      saveStoredGame(gameStorageKey, message.data.serializedGame)
+    }
+
+    p2pRoom.on('message', receiveGameStart)
+    return () => {
+      p2pRoom.off('message', receiveGameStart)
+    }
+  }, [gameStorageKey, p2pRoom, room])
 
   const memberUserIdLookup = useMemo<Record<number, string>>(
     () =>
@@ -235,14 +255,19 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     ...(!hasRoomSession ? ['Connect to the room before starting.'] : []),
   ]
   const startGame = () => {
-    if (!isHost || !assembledGame?.inputs || !hasRoomSession || !p2pRoom) return
-    setStartedGame({ roomId: room.id, inputs: assembledGame.inputs, p2pRoom })
+    if (!isHost || !assembledGame?.inputs || !hasRoomSession || !p2pRoom || !gameStorageKey) return
+    const serializedGame = JSON.stringify(new GameState(assembledGame.inputs))
+    const gameStart: GameStartMessageData = { roomId: room.id, serializedGame }
+
+    saveStoredGame(gameStorageKey, serializedGame)
+    p2pRoom.broadcast(GAME_START_MESSAGE, gameStart)
   }
 
   const isMemberConnected = (member: (typeof room.members)[number]) =>
     hasRoomSession &&
     member.invite_accepted &&
     (member.id === currentMember?.id || peerStates[member.id] === 'connected')
+
   const connectedMembers = room.members.filter(isMemberConnected)
   const connectedPeerCount = connectedMembers.filter((member) => member.id !== currentMember?.id).length
   const canChat = connectedPeerCount > 0
@@ -264,17 +289,17 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     setDraft('')
   }
 
-  if (gameActive && startedGame) {
+  if (gameActive && gameStorageKey && p2pRoom && hasRoomSession) {
     return (
-      <OnlineGameStateProvider
-        key={startedGame.roomId}
-        name={startedGame.inputs.boardName}
-        playerData={startedGame.inputs.playerData}
-        p2pRoom={p2pRoom ?? startedGame.p2pRoom}
-        resetGame={() => setStartedGame(undefined)}
+      <GameStateProvider
+        key={room.id}
+        storageKey={gameStorageKey}
+        resetGame={() => removeStoredGame(gameStorageKey)}
       >
-        <GameBoard className={className} {...props} />
-      </OnlineGameStateProvider>
+        <OnlineGameStateProvider p2pRoom={p2pRoom}>
+          <GameBoard className={className} {...props} />
+        </OnlineGameStateProvider>
+      </GameStateProvider>
     )
   }
 
@@ -447,7 +472,10 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                       </div>
                     )}
                     {isCurrentUser && !isHost && colorError && (
-                      <p className="w-full rounded-lg border border-red-300/25 bg-red-950/35 px-3 py-2 text-xs text-red-100" role="alert">
+                      <p
+                        className="w-full rounded-lg border border-red-300/25 bg-red-950/35 px-3 py-2 text-xs text-red-100"
+                        role="alert"
+                      >
                         {colorError}
                       </p>
                     )}
@@ -457,11 +485,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             </ul>
           </section>
 
-          <RoomBoardPicker
-            value={setup.boardName}
-            isHost={isHost}
-            onChange={chooseBoard}
-          />
+          <RoomBoardPicker value={setup.boardName} isHost={isHost} onChange={chooseBoard} />
 
           {isHost && (
             <section className="flex flex-col gap-4 rounded-2xl border border-amber-200/30 bg-linear-to-br from-amber-400/15 to-amber-950/20 p-5 shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-6">

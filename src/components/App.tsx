@@ -1,11 +1,11 @@
-import React, { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import React from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { SignedIn, SignedOut, useSignOut, useUserData } from '@nhost/react'
 import { toast, useOnlyOnce } from '@8thday/react'
 import clsx from 'clsx'
 import { Notifications } from './Notifications'
 import { Avatar } from './Avatar'
-import { GameNavigationProvider } from '../hooks/useGameNavigation'
+import { LOCAL_GAME_STORAGE_KEY, onlineGameStorageKey, useStoredGame } from '../hooks/useStoredGame'
 import {
   ArrowLeftStartOnRectangleIcon,
   ArrowRightEndOnRectangleIcon,
@@ -28,14 +28,17 @@ const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
 export interface AppProps {}
 
 export const App = (_: AppProps) => {
-  const [gameActive, setGameActive] = useState(false)
+  const { pathname } = useLocation()
+  const roomId = pathname.match(/^\/online\/room\/(\d+)\/?$/)?.[1]
+  const gameStorageKey = pathname === '/local' ? LOCAL_GAME_STORAGE_KEY : roomId ? onlineGameStorageKey(Number(roomId)) : null
+  const gameActive = useStoredGame(gameStorageKey) !== null
   const { signOut } = useSignOut()
   const user = useUserData()
 
   useOnlyOnce(() => toast.success({ message: `Welcome, ${user?.displayName}!` }), !!user)
 
   return (
-    <GameNavigationProvider setGameActive={setGameActive}>
+    <>
       {!gameActive && (
         <nav
           className="fixed bottom-0 z-40 flex h-12 w-full border-t border-amber-100/15 bg-slate-950/95 text-amber-50 shadow-2xl shadow-black/35 backdrop-blur-md sm:bottom-auto sm:top-0 sm:border-b sm:border-t-0"
@@ -89,6 +92,6 @@ export const App = (_: AppProps) => {
         </nav>
       )}
       <Outlet />
-    </GameNavigationProvider>
+    </>
   )
 }

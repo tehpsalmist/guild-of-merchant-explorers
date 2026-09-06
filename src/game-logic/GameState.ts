@@ -387,6 +387,7 @@ export class TurnHistory {
 
 export interface SerializedPlayer {
   id: string
+  displayName?: string
   color: string
   moveHistory: SerializedMoveHistory
   investigateCardCandidates: [SerializedCard, SerializedCard] | null
@@ -660,6 +661,7 @@ export class Player extends EventTarget {
   toJSON(): SerializedPlayer {
     return {
       id: this.id,
+      displayName: this.displayName,
       color: this.color,
       moveHistory: this.moveHistory as SerializedMoveHistory,
       investigateCardCandidates: this.investigateCardCandidates,

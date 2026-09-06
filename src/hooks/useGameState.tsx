@@ -1,5 +1,5 @@
 import React, { ReactNode, createContext, useContext, useMemo } from 'react'
-import { BoardName, GameState, PlayerInputs, SerializedGameState } from '../game-logic/GameState'
+import { GameState, SerializedGameState } from '../game-logic/GameState'
 
 export const GameStateContext = createContext<{
   resetGame(): void
@@ -9,20 +9,18 @@ export const GameStateContext = createContext<{
 
 export interface GameStateProviderProps {
   children: ReactNode
-  name: BoardName
-  playerData: PlayerInputs[]
+  storageKey: string
   resetGame(): void
 }
 
-export const GameStateProvider = ({ children, name, playerData, resetGame }: GameStateProviderProps) => {
+export const GameStateProvider = ({ children, storageKey, resetGame }: GameStateProviderProps) => {
   const gameState = useMemo(() => {
-    const savedState = localStorage.getItem('gome-serialized-game-state')
+    const savedState = localStorage.getItem(storageKey)
 
     if (savedState) {
       try {
-        // Saved locally by GameState.toJSON; restoration failures fall back to a new game.
+        // Saved locally by GameState.toJSON.
         const parsedState = JSON.parse(savedState) as SerializedGameState
-        console.log(parsedState)
         const restoredGameState = new GameState({ boardName: parsedState.boardName }, parsedState)
         restoredGameState.players.forEach((p) => p.replayMoves())
 
@@ -31,20 +29,13 @@ export const GameStateProvider = ({ children, name, playerData, resetGame }: Gam
         return restoredGameState
       } catch (e) {
         console.error('bad game state:', e, savedState)
-        // localStorage.removeItem('gome-serialized-game-state')
       }
     }
-
-    return new GameState({ boardName: name, playerData })
-  }, [name, playerData])
+  }, [storageKey])
 
   if (!gameState) return null
 
-  return (
-    <GameStateContext.Provider value={{ gameState, resetGame, storageKey: 'gome-serialized-game-state' }}>
-      {children}
-    </GameStateContext.Provider>
-  )
+  return <GameStateContext.Provider value={{ gameState, resetGame, storageKey }}>{children}</GameStateContext.Provider>
 }
 
 export const useGameState = () => {

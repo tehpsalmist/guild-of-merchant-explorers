@@ -1,5 +1,5 @@
-import React, { ComponentProps, useLayoutEffect } from 'react'
-import { BoardName, PlayerInputs } from '../game-logic/GameState'
+import React, { ComponentProps } from 'react'
+import { BoardName, GameState, PlayerInputs } from '../game-logic/GameState'
 import { GameStateProvider } from '../hooks/useGameState'
 import { GameBoard } from './GameBoard'
 import { TextInput, useRememberedState } from '@8thday/react'
@@ -7,16 +7,20 @@ import clsx from 'clsx'
 import { MapIcon, PlayIcon, PlusIcon, UserGroupIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ColorPicker } from './ColorPicker'
 import { Main } from '../design-system/Main'
-import { useGameNavigation } from '../hooks/useGameNavigation'
 import { BoardSelectionCards, boards } from './BoardSelectionCards'
+import {
+  LOCAL_GAME_STORAGE_KEY,
+  removeStoredGame,
+  saveStoredGame,
+  useStoredGame,
+} from '../hooks/useStoredGame'
 
 export interface LocalGameProps extends ComponentProps<'main'> {}
 
 export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
-  const setGameActive = useGameNavigation()
   const [boardName, setBoardName] = useRememberedState<BoardName | ''>('gome-board-name', '')
   const [playerData, setPlayerData] = useRememberedState<PlayerInputs[]>('gome-player-data', [{ id: '', color: '' }])
-  const [readyToPlay, setReadyToPlay] = useRememberedState('gome-ready-to-play', false)
+  const savedGame = useStoredGame(LOCAL_GAME_STORAGE_KEY)
 
   const hasDupes = playerData.some((player, i) =>
     playerData.some(
@@ -29,14 +33,8 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
   const disabled =
     !boardName || !playerData.length || playerData.some(({ id, color }) => !id.trim() || !color) || hasDupes
 
-  const gameActive = readyToPlay && !disabled
+  const gameActive = savedGame !== null
   const selectedBoard = boards.find(({ name }) => name === boardName)
-
-  useLayoutEffect(() => {
-    setGameActive(gameActive)
-
-    return () => setGameActive(false)
-  }, [gameActive, setGameActive])
 
   if (!gameActive)
     return (
@@ -60,7 +58,9 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
           className="relative mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:px-8"
           onSubmit={(event) => {
             event.preventDefault()
-            if (!disabled) setReadyToPlay(true)
+            if (!disabled && boardName) {
+              saveStoredGame(LOCAL_GAME_STORAGE_KEY, JSON.stringify(new GameState({ boardName, playerData })))
+            }
           }}
         >
           <header className="mx-auto max-w-2xl text-center">
@@ -203,12 +203,10 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
   return (
     <GameStateProvider
       resetGame={() => {
-        localStorage.removeItem('gome-serialized-game-state')
-        setReadyToPlay(false)
+        removeStoredGame(LOCAL_GAME_STORAGE_KEY)
         setBoardName('')
       }}
-      name={boardName}
-      playerData={playerData}
+      storageKey={LOCAL_GAME_STORAGE_KEY}
     >
       <GameBoard className={className} {...props} />
     </GameStateProvider>

@@ -9,6 +9,7 @@ export interface RoomSetup {
 
 export const GAME_SETUP_MESSAGE = 'game-setup'
 export const GAME_SETUP_COLOR_MESSAGE = 'game-setup-color'
+export const GAME_START_MESSAGE = 'game-start'
 
 export const EXPLORER_COLORS = [
   'hue-rotate-[310deg] saturate-[7] brightness-[0.7]',
@@ -34,6 +35,11 @@ export interface GameSetupMessageData {
 
 export interface GameSetupColorMessageData {
   color: string
+}
+
+export interface GameStartMessageData {
+  roomId: number
+  serializedGame: string
 }
 
 type Room = NonNullable<RoomSubSubscription['room_by_pk']>
@@ -62,6 +68,17 @@ export function isGameSetupColorMessageData(value: unknown): value is GameSetupC
     Object.keys(value).length === 1 &&
     'color' in value &&
     typeof value.color === 'string'
+  )
+}
+
+export function isGameStartMessageData(value: unknown, roomId: number): value is GameStartMessageData {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'roomId' in value &&
+    value.roomId === roomId &&
+    'serializedGame' in value &&
+    typeof value.serializedGame === 'string'
   )
 }
 
@@ -103,13 +120,18 @@ export function assembleRoomGame(
   playerNames: Record<string, string> = {},
 ): AssembledRoomGame {
   if (userId !== room.host_id) return { inputs: null, requirements: ['Only the host can start this game.'] }
-  if (setup.roomId !== room.id)
+
+  if (setup.roomId !== room.id) {
     return { inputs: null, requirements: ['Choose a board and player colors for this room.'] }
+  }
 
   const requirements: string[] = []
   const members = room.members.filter((member) => member.invite_accepted)
+
   if (!setup.boardName) requirements.push('Choose a board.')
+
   if (!members.length) requirements.push('At least one explorer must accept an invitation.')
+
   if (members.length && !members.some((member) => member.player_id === room.host_id)) {
     requirements.push('The host must be an accepted member of this room.')
   }
@@ -117,16 +139,23 @@ export function assembleRoomGame(
   const playerData: PlayerInputs[] = members.map((member, index) => {
     const name = playerNames[member.player_id] || `Explorer ${index + 1}`
     const color = setup.colors[member.id]?.trim() ?? ''
+
     if (!member.player_id.trim()) requirements.push(`${name} needs a player identity.`)
+
     if (!color) requirements.push(`Choose a color for ${name}.`)
+
     return { id: member.player_id, displayName: name, color }
   })
+
   const colors = playerData.map((player) => player.color).filter(Boolean)
+
   if (new Set(colors).size !== colors.length) requirements.push('Each explorer needs a different color.')
+
   if (new Set(playerData.map((player) => player.id)).size !== playerData.length) {
     requirements.push('Each explorer must have a unique player identity.')
   }
 
   if (requirements.length || !setup.boardName) return { inputs: null, requirements }
+
   return { inputs: { boardName: setup.boardName, playerData }, requirements: [] }
 }
