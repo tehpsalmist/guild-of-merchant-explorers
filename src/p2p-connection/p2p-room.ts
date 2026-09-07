@@ -50,6 +50,7 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
 
   private heartbeatTimer?: ReturnType<typeof setInterval>
   private readonly seenMessageIds = new Set<string>()
+  private readonly remoteStreams = new Map<number, MediaStream>()
   private destroyed = false
 
   static async connect(room: Room, userId: string, nhost: NhostClient, apollo: ApolloClient<object>) {
@@ -115,6 +116,7 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
       const userId = previousMembers.find((member) => member.id === memberId)?.player_id ?? ''
       connection.destroy()
       this.connections.delete(memberId)
+      this.remoteStreams.delete(memberId)
       this.emit('peer-state', { userId, memberId, state: 'closed' })
     }
 
@@ -123,12 +125,16 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
 
       const connection = new P2PConnection(this.myId, member.id, this.id, this.sessionId, this.nhost, this.apollo)
       connection.on('message', (message) => this.receive(member, message))
-      connection.on('stream', (stream) => this.emit('stream', {
-        userId: member.player_id,
-        memberId: member.id,
-        stream,
-      }))
+      connection.on('stream', (stream) => {
+        this.remoteStreams.set(member.id, stream)
+        this.emit('stream', {
+          userId: member.player_id,
+          memberId: member.id,
+          stream,
+        })
+      })
       connection.on('handshake-state', (state) => {
+        if (state !== 'connected') this.remoteStreams.delete(member.id)
         this.emit('peer-state', { userId: member.player_id, memberId: member.id, state })
       })
       this.connections.set(member.id, connection)
@@ -146,6 +152,14 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
 
   getPeer(userId: string) {
     return this.getPeers().find((peer) => peer.userId === userId)
+  }
+
+  getRemoteStreams(): RoomStream[] {
+    return [...this.remoteStreams.entries()].map(([memberId, stream]) => ({
+      userId: this.userIdFor(memberId),
+      memberId,
+      stream,
+    }))
   }
 
   sendTo<T>(userId: string, type: string, data: T) {
@@ -216,6 +230,7 @@ export class P2PRoom extends EventEmitter<RoomEvents> implements Room {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     for (const connection of this.connections.values()) connection.destroy()
     this.connections.clear()
+    this.remoteStreams.clear()
 
     if (releaseSession) {
       this.nhost.graphql.request(RELEASE_ROOM_SESSION, { roomId: this.id, sessionId: this.sessionId })

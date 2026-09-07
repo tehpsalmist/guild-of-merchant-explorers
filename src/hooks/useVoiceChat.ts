@@ -38,10 +38,15 @@ export const useVoiceChat = (room?: P2PRoom) => {
     enabledRef.current = voiceEnabled
     setEnabled(voiceEnabled)
     setMemberState(activeRoom.myId, voiceEnabled)
+
+    // Keep the sender negotiated so disabling and reenabling voice does not
+    // require rebuilding the WebRTC connection. A disabled audio track sends
+    // no microphone audio.
     localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = voiceEnabled })
     remoteAudioRef.current.forEach((audio) => {
       audio.muted = !voiceEnabled
-      if (voiceEnabled) audio.play().catch(() => undefined)
+      audio.volume = voiceEnabled ? 1 : 0
+      audio.play().catch(() => undefined)
     })
     activeRoom.broadcast(VOICE_STATE_MESSAGE, { enabled: voiceEnabled })
   }
@@ -82,18 +87,22 @@ export const useVoiceChat = (room?: P2PRoom) => {
       setMemberState(message.memberId, message.data.enabled)
     }
     const receiveStream = ({ memberId, stream }: RoomStream) => {
-      stopRemoteAudio(memberId)
-      const audio = new Audio()
-      audio.autoplay = true
+      let audio = remoteAudioRef.current.get(memberId)
+      if (!audio) {
+        audio = new Audio()
+        audio.autoplay = true
+        remoteAudioRef.current.set(memberId, audio)
+      }
       audio.muted = !enabledRef.current
+      audio.volume = enabledRef.current ? 1 : 0
       audio.srcObject = stream
-      remoteAudioRef.current.set(memberId, audio)
       audio.play().catch(() => undefined)
     }
 
     room.on('peer-state', updatePeerState)
     room.on('message', receiveVoiceState)
     room.on('stream', receiveStream)
+    room.getRemoteStreams().forEach(receiveStream)
 
     return () => {
       activeRoomRef.current = undefined

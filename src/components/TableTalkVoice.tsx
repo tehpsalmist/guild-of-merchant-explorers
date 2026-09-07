@@ -4,11 +4,19 @@ import type { VoiceChatState } from '../hooks/useVoiceChat'
 import { usePlayerList } from '../hooks/usePlayerList'
 import clsx from 'clsx'
 
-export const TableTalkVoice = ({ room, voice }: { room: P2PRoom; voice: VoiceChatState }) => {
+export const TableTalkVoice = ({
+  room,
+  voice,
+  className,
+}: {
+  room: P2PRoom
+  voice: VoiceChatState
+  className?: string
+}) => {
   const { userLookup } = usePlayerList()
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-amber-100/10 px-4 py-2">
+    <div className={clsx('flex shrink-0 items-center gap-3 border-b border-amber-100/10 px-4 py-2', className)}>
       <div className="flex min-w-0 grow flex-wrap gap-x-3 gap-y-1 text-xs text-amber-100/55">
         {room.members.filter((member) => member.invite_accepted).map((member) => {
           const player = userLookup[member.player_id]

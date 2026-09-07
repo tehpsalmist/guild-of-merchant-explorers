@@ -587,7 +587,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          {p2pRoom && <TableTalkVoice room={p2pRoom} voice={voice} />}
+          {p2pRoom && <TableTalkVoice className="pr-12! lg:pr-4!" room={p2pRoom} voice={voice} />}
 
           <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
             {chatMessages.length === 0 ? (
