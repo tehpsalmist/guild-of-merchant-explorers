@@ -180,7 +180,7 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
     const previous = knownTreasureCards.current[viewedPlayer.id]
     const cardIds = cards.map(({ card }) => card.id)
     knownTreasureCards.current[viewedPlayer.id] = cardIds
-    if (!previous || (onlineGame && viewedPlayer.id !== userId)) return
+    if (!previous || !onlineGame || viewedPlayer.id !== userId || onlineGame.p2pRoom.host_id === userId) return
     const addedCard = cards.find(({ card }) => !previous.includes(card.id))
     if (addedCard) setNewTreasureCard({ card: addedCard.card, playerName: viewedPlayer.displayName })
   }, [viewedPlayer, onlineGame, userId])
