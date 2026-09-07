@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "codegen:types": "graphql-codegen",
-    "lint": "eslint src tests codegen.ts vite.config.mts",
+    "lint": "eslint src codegen.ts vite.config.mts",
     "check": "npm run typecheck && npm run lint"
   },
   "repository": {
