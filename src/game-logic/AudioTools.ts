@@ -44,14 +44,15 @@ export class AudioTools {
     }
   }
 
-  play(audio: HTMLAudioElement) {
+  play(audio: HTMLAudioElement, volume = 1) {
     audio.currentTime = 0
+    audio.volume = volume
     audio.play()
   }
 
-  playAfterDelay(audio: HTMLAudioElement, delay: number) {
+  playAfterDelay(audio: HTMLAudioElement, delay: number, volume = 1) {
     setTimeout(() => {
-      this.play(audio)
+      this.play(audio, volume)
     }, delay)
   }
 }

@@ -39,6 +39,8 @@ import { treasureCardDataLookup } from '../data/cards/treasure-cards'
 
 export type BoardName = 'aghon' | 'avenia' | 'kazan' | 'cnidaria' | 'northProylia' | 'xawskil'
 
+const OTHER_PLAYER_SOUND_EFFECT_VOLUME = 0.6
+
 const getBoardData = (boardName: BoardName) => {
   switch (boardName) {
     case 'aghon':
@@ -89,6 +91,7 @@ export class GameState extends EventTarget {
 
   soloMode = false
   localMode = true
+  localPlayerId?: string
   autoAdvance = true
 
   players: Player[] = []
@@ -553,7 +556,7 @@ export class Player extends EventTarget {
     this.coins += amount
 
     if (!this.replaying || this.replayingEffects) {
-      audioTools.playAfterDelay(coin1Sound, soundDelay)
+      audioTools.playAfterDelay(coin1Sound, soundDelay, this.soundEffectVolume)
     }
   }
 
@@ -562,7 +565,7 @@ export class Player extends EventTarget {
     this.coins -= amount
 
     if (!this.replaying || this.replayingEffects) {
-      audioTools.playAfterDelay(coin2Sound, soundDelay)
+      audioTools.playAfterDelay(coin2Sound, soundDelay, this.soundEffectVolume)
     }
   }
 
@@ -576,6 +579,12 @@ export class Player extends EventTarget {
 
     this.treasureCards = new TreasureHand(this)
     this.investigateCards = new InvestigateHand(this)
+  }
+
+  get soundEffectVolume() {
+    return this.gameState.localPlayerId && this.gameState.localPlayerId !== this.id
+      ? OTHER_PLAYER_SOUND_EFFECT_VOLUME
+      : 1
   }
 
   get era() {
@@ -1268,7 +1277,7 @@ export class MoveHistory {
       return
     }
 
-    audioTools.play(sfx)
+    audioTools.play(sfx, this.player.soundEffectVolume)
   }
 
   lockInMoveState() {

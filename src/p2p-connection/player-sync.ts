@@ -60,6 +60,7 @@ function isPlayerMessage(data: unknown): data is PlayerMessage {
 export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pending: boolean) => void) {
   const userId = room.members.find((member) => member.id === room.myId)?.player_id
   const isHost = userId === room.host_id
+  game.localPlayerId = userId
   const ownPlayer = () => game.players.find((player) => player.id === userId)
   const snapshot = (player: SerializedPlayer): SerializedPlayer =>
     JSON.parse(JSON.stringify(player)) as SerializedPlayer
@@ -211,6 +212,7 @@ export function connectPlayerSync(game: GameState, room: P2PRoom, onDrawing: (pe
       }
     },
     dispose() {
+      if (game.localPlayerId === userId) game.localPlayerId = undefined
       game.removeEventListener('onserialize', onSerialize)
       game.removeEventListener('oninvestigatelocked', onLocked)
       room.off('message', receive)
