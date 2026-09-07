@@ -51,7 +51,7 @@ import { getGraphqlErrorMessage } from '../graphql/utils'
 import type { PeerState } from '../p2p-connection/p2p-connection'
 import { onlineGameStorageKey, removeStoredGame, saveStoredGame, useStoredGame } from '../hooks/useStoredGame'
 import { useVoiceChat } from '../hooks/useVoiceChat'
-import { VoiceChatButton } from './VoiceChatButton'
+import { TableTalkVoice } from './TableTalkVoice'
 
 interface ChatMessage {
   message: string
@@ -300,7 +300,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
         resetGame={() => removeStoredGame(gameStorageKey)}
       >
         <OnlineGameStateProvider p2pRoom={p2pRoom}>
-          <GameBoard className={className} {...props} />
+          <GameBoard className={className} voiceChat={voice} {...props} />
         </OnlineGameStateProvider>
       </GameStateProvider>
     )
@@ -577,15 +577,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                 {connectionLabel}
               </p>
             </div>
-            <VoiceChatButton enabled={voice.enabled} changing={voice.changing} onClick={voice.toggle} />
           </header>
 
-          <VoiceChatButton
-            enabled={voice.enabled}
-            changing={voice.changing}
-            onClick={voice.toggle}
-            className="absolute right-11 top-1 z-10 bg-slate-950/85 shadow-lg lg:hidden"
-          />
           <button
             className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 bg-slate-950/85 text-amber-100/60 shadow-lg backdrop-blur-sm transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 lg:hidden"
             onClick={() => setMobileChatOpen(false)}
@@ -594,20 +587,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-b border-amber-100/10 px-4 py-2 pr-24 text-xs text-amber-100/55 lg:pr-4">
-            {acceptedMembers.map((member) => {
-              const player = userLookup[member.player_id]
-              const isMine = member.id === currentMember?.id
-              return (
-                <span key={member.id} className="inline-flex min-w-0 items-center gap-1">
-                  <span className="max-w-32 truncate">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}</span>
-                  {voice.memberStates[member.id] && (
-                    <MicrophoneIcon className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-label="Voice enabled" />
-                  )}
-                </span>
-              )
-            })}
-          </div>
+          {p2pRoom && <TableTalkVoice room={p2pRoom} voice={voice} />}
 
           <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
             {chatMessages.length === 0 ? (

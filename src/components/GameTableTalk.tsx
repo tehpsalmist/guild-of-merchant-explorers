@@ -4,8 +4,8 @@ import { ChatBubbleLeftRightIcon, MicrophoneIcon, PaperAirplaneIcon, XMarkIcon }
 import { ExpeditionButton } from '../design-system/ExpeditionButton'
 import type { P2PRoom } from '../p2p-connection/p2p-room'
 import { usePlayerList } from '../hooks/usePlayerList'
-import { useVoiceChat } from '../hooks/useVoiceChat'
-import { VoiceChatButton } from './VoiceChatButton'
+import type { VoiceChatState } from '../hooks/useVoiceChat'
+import { TableTalkVoice } from './TableTalkVoice'
 
 interface ChatMessage {
   memberId: number
@@ -13,7 +13,7 @@ interface ChatMessage {
   sentAt: Date
 }
 
-export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
+export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: VoiceChatState }) => {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -21,7 +21,6 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
   const [peerStates, setPeerStates] = useState<Record<number, string>>({})
   const messagesRef = useRef<HTMLDivElement>(null)
   const openRef = useRef(false)
-  const voice = useVoiceChat(p2pRoom)
   const { userLookup } = usePlayerList()
   const membersById = Object.fromEntries(p2pRoom.members.map((member) => [member.id, member]))
   const connectedPeerCount = Object.values(peerStates).filter((state) => state === 'connected').length
@@ -120,7 +119,6 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
                   {connectionLabel}
                 </p>
               </div>
-              <VoiceChatButton enabled={voice.enabled} changing={voice.changing} onClick={voice.toggle} />
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/15 text-amber-100/60 transition hover:bg-slate-900 hover:text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
@@ -130,18 +128,7 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </header>
-            <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-b border-amber-100/10 px-4 py-2 text-xs text-amber-100/55">
-              {p2pRoom.members.filter((member) => member.invite_accepted).map((member) => {
-                const player = userLookup[member.player_id]
-                const isMine = member.id === p2pRoom.myId
-                return (
-                  <span key={member.id} className="inline-flex min-w-0 items-center gap-1">
-                    <span className="max-w-32 truncate">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}</span>
-                    {voice.memberStates[member.id] && <MicrophoneIcon className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-label="Voice enabled" />}
-                  </span>
-                )
-              })}
-            </div>
+            <TableTalkVoice room={p2pRoom} voice={voice} />
             <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3">
               {messages.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-8 text-center">
