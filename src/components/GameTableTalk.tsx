@@ -15,7 +15,7 @@ interface ChatMessage {
   sentAt: Date
 }
 
-export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice?: VoiceChatState }) => {
+export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: VoiceChatState }) => {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -131,8 +131,8 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice?: Vo
               </button>
             </header>
             <div className="flex shrink-0 items-center gap-2 border-b border-amber-100/10 pr-4">
-              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} />
-              {voice && <TableTalkMicrophone voice={voice} />}
+              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} voice={voice} />
+              <TableTalkMicrophone voice={voice} />
             </div>
             <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3">
               {messages.length === 0 ? (

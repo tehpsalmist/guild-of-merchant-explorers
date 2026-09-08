@@ -590,7 +590,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
 
           {p2pRoom && (
             <div className="flex shrink-0 items-center gap-2 border-b border-amber-100/10 pr-12 lg:pr-4">
-              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} />
+              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} voice={voice} />
               <TableTalkMicrophone voice={voice} />
             </div>
           )}

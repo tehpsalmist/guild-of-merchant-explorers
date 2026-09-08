@@ -227,7 +227,7 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
 
   return (
     <>
-      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && <GameTableTalk p2pRoom={onlineGame.p2pRoom} voice={voiceChat} />} />
+      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && voiceChat && <GameTableTalk p2pRoom={onlineGame.p2pRoom} voice={voiceChat} />} />
       <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 hover:z-80 focus-within:z-80 landscape:max-w-[calc(100dvw-10rem)]">
         {canControlViewedPlayer && isInvestigateChoice && (
           <GameActionButton

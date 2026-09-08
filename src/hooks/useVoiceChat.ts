@@ -1,21 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from '@8thday/react'
-import type { P2PRoom, RoomPeer, RoomStream } from '../p2p-connection/p2p-room'
+import type { P2PRoom, RoomMessage, RoomPeer, RoomStream } from '../p2p-connection/p2p-room'
+
+const VOICE_MUTE_MESSAGE = 'voice-mute'
+
+const isVoiceMuteMessage = (data: unknown): data is { muted: boolean } =>
+  !!data && typeof data === 'object' && 'muted' in data && typeof data.muted === 'boolean'
 
 export const useVoiceChat = (room?: P2PRoom) => {
   const [muted, setMuted] = useState(false)
+  const [mutedMembers, setMutedMembers] = useState<Record<number, boolean>>({})
   const mutedRef = useRef(false)
+  const mutedMembersRef = useRef<Record<number, boolean>>({})
   const localStreamRef = useRef<MediaStream>()
+
+  const setMemberMuted = (memberId: number, isMuted: boolean) => {
+    mutedMembersRef.current = { ...mutedMembersRef.current, [memberId]: isMuted }
+    setMutedMembers(mutedMembersRef.current)
+  }
 
   const toggleMute = () => {
     mutedRef.current = !mutedRef.current
     localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current })
     setMuted(mutedRef.current)
+    if (room) {
+      setMemberMuted(room.myId, mutedRef.current)
+      room.broadcast(VOICE_MUTE_MESSAGE, { muted: mutedRef.current })
+    }
   }
 
   useEffect(() => {
     if (!room) return
 
+    mutedMembersRef.current = { [room.myId]: mutedRef.current }
+    setMutedMembers(mutedMembersRef.current)
     let disposed = false
     let localStream: MediaStream | undefined
     const remoteAudio = new Map<number, HTMLAudioElement>()
@@ -37,14 +55,25 @@ export const useVoiceChat = (room?: P2PRoom) => {
       play(audio)
     }
     const updatePeer = ({ userId, memberId, state }: RoomPeer) => {
-      if (state !== 'connected') stopRemote(memberId)
-      else if (localStream) room.addStreamTo(userId, localStream)
+      if (state !== 'connected') {
+        stopRemote(memberId)
+        setMemberMuted(memberId, false)
+      } else {
+        room.sendTo(userId, VOICE_MUTE_MESSAGE, { muted: mutedRef.current })
+        if (localStream) room.addStreamTo(userId, localStream)
+      }
+    }
+    const receiveMuteState = (message: RoomMessage) => {
+      if (message.type === VOICE_MUTE_MESSAGE && isVoiceMuteMessage(message.data)) {
+        setMemberMuted(message.memberId, message.data.muted)
+      }
     }
     // Browsers may require a page interaction before allowing audible playback.
     const resumeAudio = () => remoteAudio.forEach((audio) => { if (audio.paused) play(audio) })
 
     room.on('stream', receiveStream)
     room.on('peer-state', updatePeer)
+    room.on('message', receiveMuteState)
     room.getRemoteStreams().forEach(receiveStream)
     document.addEventListener('pointerdown', resumeAudio)
     document.addEventListener('keydown', resumeAudio)
@@ -73,6 +102,7 @@ export const useVoiceChat = (room?: P2PRoom) => {
       disposed = true
       room.off('stream', receiveStream)
       room.off('peer-state', updatePeer)
+      room.off('message', receiveMuteState)
       document.removeEventListener('pointerdown', resumeAudio)
       document.removeEventListener('keydown', resumeAudio)
       remoteAudio.forEach((_, memberId) => stopRemote(memberId))
@@ -85,7 +115,7 @@ export const useVoiceChat = (room?: P2PRoom) => {
     }
   }, [room])
 
-  return { muted, toggleMute }
+  return { muted, mutedMembers, toggleMute }
 }
 
 export type VoiceChatState = ReturnType<typeof useVoiceChat>
