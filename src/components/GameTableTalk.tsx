@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, WifiIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ExpeditionButton } from '../design-system/ExpeditionButton'
 import type { P2PRoom } from '../p2p-connection/p2p-room'
 import { usePlayerList } from '../hooks/usePlayerList'
@@ -28,6 +28,12 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: Voi
   const connectedPeerCount = Object.values(peerStates).filter((state) => state === 'connected').length
   const peerCount = p2pRoom.connections.size
   const canChat = connectedPeerCount > 0
+  const localMember = p2pRoom.members.find((member) => member.id === p2pRoom.myId)
+  const requiredConnections =
+    localMember?.player_id === p2pRoom.host_id
+      ? p2pRoom.members.filter((member) => member.invite_accepted && member.id !== p2pRoom.myId)
+      : p2pRoom.members.filter((member) => member.invite_accepted && member.player_id === p2pRoom.host_id)
+  const hasRequiredConnectionMissing = requiredConnections.some((member) => peerStates[member.id] !== 'connected')
   const connectionLabel =
     peerCount === 0
       ? 'Waiting for another explorer'
@@ -80,7 +86,13 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: Voi
         type="button"
         className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-slate-900/50 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-white/80"
         onClick={() => setOpen(true)}
-        aria-label={unreadCount ? `Open voice and text chat, ${unreadCount} unread messages` : 'Open voice and text chat'}
+        aria-label={
+          hasRequiredConnectionMissing
+            ? 'Open voice and text chat, required game connection unavailable'
+            : unreadCount
+              ? `Open voice and text chat, ${unreadCount} unread messages`
+              : 'Open voice and text chat'
+        }
         aria-expanded={open}
         aria-controls="game-table-talk"
         title="Table Talk — voice and text chat"
@@ -89,6 +101,15 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: Voi
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-red-500 px-1.5 text-[0.65rem] font-black leading-none text-white">
             {unreadCount}
+          </span>
+        )}
+        {hasRequiredConnectionMissing && (
+          <span
+            className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-red-500 text-white"
+            aria-label="Required game connection unavailable"
+          >
+            <WifiIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="absolute h-px w-4 rotate-45 bg-white" aria-hidden="true" />
           </span>
         )}
         <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
