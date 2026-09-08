@@ -1,8 +1,18 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from '@8thday/react'
 import type { P2PRoom, RoomPeer, RoomStream } from '../p2p-connection/p2p-room'
 
 export const useVoiceChat = (room?: P2PRoom) => {
+  const [muted, setMuted] = useState(false)
+  const mutedRef = useRef(false)
+  const localStreamRef = useRef<MediaStream>()
+
+  const toggleMute = () => {
+    mutedRef.current = !mutedRef.current
+    localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current })
+    setMuted(mutedRef.current)
+  }
+
   useEffect(() => {
     if (!room) return
 
@@ -47,6 +57,9 @@ export const useVoiceChat = (room?: P2PRoom) => {
           return
         }
         localStream = stream
+        localStreamRef.current = stream
+        // Honor a mute click made while microphone permission was pending.
+        stream.getAudioTracks().forEach((track) => { track.enabled = !mutedRef.current })
         room.getPeers().forEach(({ userId }) => room.addStreamTo(userId, stream))
       } catch (error) {
         if (disposed) return
@@ -65,9 +78,14 @@ export const useVoiceChat = (room?: P2PRoom) => {
       remoteAudio.forEach((_, memberId) => stopRemote(memberId))
       if (localStream) {
         const stream = localStream
+        if (localStreamRef.current === stream) localStreamRef.current = undefined
         room.getPeers().forEach(({ userId }) => room.removeStreamFrom(userId, stream))
         stream.getTracks().forEach((track) => track.stop())
       }
     }
   }, [room])
+
+  return { muted, toggleMute }
 }
+
+export type VoiceChatState = ReturnType<typeof useVoiceChat>

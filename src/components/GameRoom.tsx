@@ -51,6 +51,8 @@ import type { PeerState } from '../p2p-connection/p2p-connection'
 import { onlineGameStorageKey, removeStoredGame, saveStoredGame, useStoredGame } from '../hooks/useStoredGame'
 import { useVoiceChat } from '../hooks/useVoiceChat'
 import { TableTalkParticipants } from './TableTalkParticipants'
+import { TableTalkMicrophone } from './TableTalkMicrophone'
+import { TableTalkIcon } from './TableTalkIcon'
 
 interface ChatMessage {
   message: string
@@ -78,7 +80,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const { roomId } = useParams()
   const userId = useUserId()
   const { userLookup } = usePlayerList()
-  useVoiceChat(p2pRoom)
+  const voice = useVoiceChat(p2pRoom)
   const numericRoomId = Number(roomId)
   const gameStorageKey = Number.isInteger(numericRoomId) ? onlineGameStorageKey(numericRoomId) : null
   const savedGame = useStoredGame(gameStorageKey)
@@ -299,7 +301,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
         resetGame={() => removeStoredGame(gameStorageKey)}
       >
         <OnlineGameStateProvider p2pRoom={p2pRoom}>
-          <GameBoard className={className} {...props} />
+          <GameBoard className={className} voiceChat={voice} {...props} />
         </OnlineGameStateProvider>
       </GameStateProvider>
     )
@@ -562,7 +564,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
         >
           <header className="hidden shrink-0 items-center gap-3 border-b border-amber-100/10 px-5 py-4 lg:flex">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
-              <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
+              <TableTalkIcon />
             </span>
             <div className="min-w-0 grow">
               <h2 className="font-serif text-2xl text-amber-50" id="conversation-heading">
@@ -586,7 +588,12 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          {p2pRoom && <TableTalkParticipants className="pr-12! lg:pr-4!" room={p2pRoom} />}
+          {p2pRoom && (
+            <div className="flex shrink-0 items-center gap-2 border-b border-amber-100/10 pr-12 lg:pr-4">
+              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} />
+              <TableTalkMicrophone voice={voice} />
+            </div>
+          )}
 
           <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
             {chatMessages.length === 0 ? (
@@ -729,11 +736,11 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
           <button
             className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] right-4 z-20 flex h-14 w-14 touch-manipulation items-center justify-center rounded-full border border-amber-100/30 bg-[#f5edcf] text-slate-950 shadow-2xl shadow-black/40 transition hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:ring-offset-2 focus:ring-offset-slate-950 lg:hidden"
             onClick={() => setMobileChatOpen(true)}
-            aria-label={unreadCount ? `Open table talk, ${unreadCount} unread messages` : 'Open table talk'}
+            aria-label={unreadCount ? `Open voice and text chat, ${unreadCount} unread messages` : 'Open voice and text chat'}
             aria-controls="table-talk-panel"
             aria-expanded="false"
           >
-            <ChatBubbleLeftRightIcon className="h-7 w-7" aria-hidden="true" />
+            <TableTalkIcon />
             {unreadCount > 0 && (
               <span
                 className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-red-500 px-1.5 text-[0.65rem] font-black leading-none text-white"

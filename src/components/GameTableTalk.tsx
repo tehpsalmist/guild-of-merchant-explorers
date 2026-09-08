@@ -5,6 +5,9 @@ import { ExpeditionButton } from '../design-system/ExpeditionButton'
 import type { P2PRoom } from '../p2p-connection/p2p-room'
 import { usePlayerList } from '../hooks/usePlayerList'
 import { TableTalkParticipants } from './TableTalkParticipants'
+import { TableTalkMicrophone } from './TableTalkMicrophone'
+import { TableTalkIcon } from './TableTalkIcon'
+import type { VoiceChatState } from '../hooks/useVoiceChat'
 
 interface ChatMessage {
   memberId: number
@@ -12,7 +15,7 @@ interface ChatMessage {
   sentAt: Date
 }
 
-export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
+export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice?: VoiceChatState }) => {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -77,19 +80,19 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
         type="button"
         className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-slate-900/50 text-white shadow-lg backdrop-blur-sm transition hover:bg-slate-900/70 focus:outline-none focus:ring-2 focus:ring-white/80"
         onClick={() => setOpen(true)}
-        aria-label={unreadCount ? `Open table talk, ${unreadCount} unread messages` : 'Open table talk'}
+        aria-label={unreadCount ? `Open voice and text chat, ${unreadCount} unread messages` : 'Open voice and text chat'}
         aria-expanded={open}
         aria-controls="game-table-talk"
-        title="Table Talk"
+        title="Table Talk — voice and text chat"
       >
-        <ChatBubbleLeftRightIcon className="h-7 w-7" aria-hidden="true" />
+        <TableTalkIcon />
         {unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-red-500 px-1.5 text-[0.65rem] font-black leading-none text-white">
             {unreadCount}
           </span>
         )}
         <span className="pointer-events-none absolute left-1/2 top-full mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/90 px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wider text-white shadow-lg group-hover:block group-focus:block landscape:left-full landscape:top-1/2 landscape:ml-2 landscape:mt-0 landscape:-translate-y-1/2 landscape:translate-x-0">
-          Table Talk
+          Voice & Text Chat
         </span>
       </button>
 
@@ -109,7 +112,7 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
           >
             <header className="flex shrink-0 items-center gap-3 border-b border-amber-100/10 px-4 py-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
-                <ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" />
+                <TableTalkIcon />
               </span>
               <div className="min-w-0 grow">
                 <h2 className="font-serif text-2xl text-amber-50">Table Talk</h2>
@@ -127,7 +130,10 @@ export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </header>
-            <TableTalkParticipants room={p2pRoom} />
+            <div className="flex shrink-0 items-center gap-2 border-b border-amber-100/10 pr-4">
+              <TableTalkParticipants className="min-w-0 grow border-b-0!" room={p2pRoom} />
+              {voice && <TableTalkMicrophone voice={voice} />}
+            </div>
             <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3">
               {messages.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-8 text-center">

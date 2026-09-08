@@ -14,9 +14,11 @@ import { TreasureCardDialog } from './TreasureCardDialog'
 import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
 import { GameTableTalk } from './GameTableTalk'
 import { useUserId } from '@nhost/react'
+import type { VoiceChatState } from '../hooks/useVoiceChat'
 
 export interface GameBoardProps extends ComponentProps<'main'> {
   followPlayerTurns?: boolean
+  voiceChat?: VoiceChatState
 }
 
 interface GameActionButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
@@ -82,7 +84,7 @@ const InvestigateActionIcon = ({ cards }: { cards: Array<{ id: string; imageUrl:
   </span>
 )
 
-export const GameBoard = ({ className = '', followPlayerTurns = false, ...props }: GameBoardProps) => {
+export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat, ...props }: GameBoardProps) => {
   const [investigateModalOpen, setInvestigateModalOpen] = useState(false)
   const [newTreasureCard, setNewTreasureCard] = useState<{
     card: TreasureCard
@@ -225,7 +227,7 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, ...props 
 
   return (
     <>
-      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && <GameTableTalk p2pRoom={onlineGame.p2pRoom} />} />
+      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && <GameTableTalk p2pRoom={onlineGame.p2pRoom} voice={voiceChat} />} />
       <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 hover:z-80 focus-within:z-80 landscape:max-w-[calc(100dvw-10rem)]">
         {canControlViewedPlayer && isInvestigateChoice && (
           <GameActionButton
