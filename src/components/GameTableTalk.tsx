@@ -1,11 +1,10 @@
 import clsx from 'clsx'
 import React, { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { ChatBubbleLeftRightIcon, MicrophoneIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { ExpeditionButton } from '../design-system/ExpeditionButton'
 import type { P2PRoom } from '../p2p-connection/p2p-room'
 import { usePlayerList } from '../hooks/usePlayerList'
-import type { VoiceChatState } from '../hooks/useVoiceChat'
-import { TableTalkVoice } from './TableTalkVoice'
+import { TableTalkParticipants } from './TableTalkParticipants'
 
 interface ChatMessage {
   memberId: number
@@ -13,7 +12,7 @@ interface ChatMessage {
   sentAt: Date
 }
 
-export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: VoiceChatState }) => {
+export const GameTableTalk = ({ p2pRoom }: { p2pRoom: P2PRoom }) => {
   const [open, setOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -128,7 +127,7 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: Voi
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </header>
-            <TableTalkVoice room={p2pRoom} voice={voice} />
+            <TableTalkParticipants room={p2pRoom} />
             <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3">
               {messages.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-8 text-center">
@@ -157,7 +156,7 @@ export const GameTableTalk = ({ p2pRoom, voice }: { p2pRoom: P2PRoom; voice: Voi
                         <div className={clsx('max-w-[88%]', isMine && 'text-right')}>
                           {(!followsSameSender || showTimestamp) && (
                             <div className="mb-1 flex items-baseline gap-2 px-1">
-                              {!followsSameSender && <span className="inline-flex items-center gap-1 truncate text-xs font-bold text-amber-100/60">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}{voice.memberStates[chatMessage.memberId] && <MicrophoneIcon className="h-3 w-3 shrink-0 text-emerald-300" aria-label="Voice enabled" />}</span>}
+                              {!followsSameSender && <span className="truncate text-xs font-bold text-amber-100/60">{isMine ? 'You' : (player?.displayName ?? 'Explorer')}</span>}
                               {showTimestamp && <time className="text-[0.65rem] text-amber-100/30" dateTime={chatMessage.sentAt.toISOString()}>{formatMessageTime(chatMessage.sentAt)}</time>}
                             </div>
                           )}

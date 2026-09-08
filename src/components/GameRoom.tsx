@@ -18,7 +18,6 @@ import {
   ChatBubbleLeftRightIcon,
   GlobeAltIcon,
   LockClosedIcon,
-  MicrophoneIcon,
   PaperAirplaneIcon,
   PlayIcon,
   UserGroupIcon,
@@ -51,7 +50,7 @@ import { getGraphqlErrorMessage } from '../graphql/utils'
 import type { PeerState } from '../p2p-connection/p2p-connection'
 import { onlineGameStorageKey, removeStoredGame, saveStoredGame, useStoredGame } from '../hooks/useStoredGame'
 import { useVoiceChat } from '../hooks/useVoiceChat'
-import { TableTalkVoice } from './TableTalkVoice'
+import { TableTalkParticipants } from './TableTalkParticipants'
 
 interface ChatMessage {
   message: string
@@ -79,7 +78,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const { roomId } = useParams()
   const userId = useUserId()
   const { userLookup } = usePlayerList()
-  const voice = useVoiceChat(p2pRoom)
+  useVoiceChat(p2pRoom)
   const numericRoomId = Number(roomId)
   const gameStorageKey = Number.isInteger(numericRoomId) ? onlineGameStorageKey(numericRoomId) : null
   const savedGame = useStoredGame(gameStorageKey)
@@ -300,7 +299,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
         resetGame={() => removeStoredGame(gameStorageKey)}
       >
         <OnlineGameStateProvider p2pRoom={p2pRoom}>
-          <GameBoard className={className} voiceChat={voice} {...props} />
+          <GameBoard className={className} {...props} />
         </OnlineGameStateProvider>
       </GameStateProvider>
     )
@@ -587,7 +586,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
             <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          {p2pRoom && <TableTalkVoice className="pr-12! lg:pr-4!" room={p2pRoom} voice={voice} />}
+          {p2pRoom && <TableTalkParticipants className="pr-12! lg:pr-4!" room={p2pRoom} />}
 
           <div ref={messagesRef} className="min-h-0 grow overflow-y-auto overscroll-contain px-3 py-3 lg:px-5 lg:py-5">
             {chatMessages.length === 0 ? (
@@ -637,9 +636,6 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
                             {!followsSameSender && (
                               <span className="inline-flex items-center gap-1 truncate text-xs font-bold text-amber-100/60">
                                 {isMine ? 'You' : (player?.displayName ?? 'Explorer')}
-                                {voice.memberStates[chatMessage.id] && (
-                                  <MicrophoneIcon className="h-3 w-3 shrink-0 text-emerald-300" aria-label="Voice enabled" />
-                                )}
                               </span>
                             )}
                             {showTimestamp && (
