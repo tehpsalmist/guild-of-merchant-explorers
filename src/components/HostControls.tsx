@@ -101,7 +101,9 @@ export const HostControls = ({
               <UserGroupIcon className="h-6 w-6" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <p className="hidden text-[0.65rem] font-bold uppercase tracking-[0.24em] text-amber-100/50 sm:block">Your table</p>
+              <p className="hidden text-[0.65rem] font-bold uppercase tracking-[0.24em] text-amber-100/50 sm:block">
+                Your table
+              </p>
               <h2 className="truncate font-serif text-xl text-amber-50 sm:text-2xl" id={`manage-players-${room.id}`}>
                 {room.name}
               </h2>
@@ -169,7 +171,7 @@ export const HostControls = ({
               </ul>
             </section>
 
-            <section className="border-t border-amber-100/15 pt-6 md:border-t-0 md:border-l md:border-amber-100/15 md:pl-8 md:pt-0">
+            <section className="min-w-0 border-t border-amber-100/15 pt-6 md:border-t-0 md:border-l md:border-amber-100/15 md:pl-8 md:pt-0">
               <div className="mb-3 flex items-baseline justify-between gap-2">
                 <h3 className="font-serif text-xl text-amber-50">Invite an explorer</h3>
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-100/45">
