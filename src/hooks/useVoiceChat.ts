@@ -55,12 +55,13 @@ export const useVoiceChat = (room?: P2PRoom) => {
       play(audio)
     }
     const updatePeer = ({ userId, memberId, state }: RoomPeer) => {
+      // Register audio when a peer first appears so its initial offer includes it.
+      if (localStream && state !== 'closed') room.addStreamTo(userId, localStream)
       if (state !== 'connected') {
         stopRemote(memberId)
         setMemberMuted(memberId, false)
       } else {
         room.sendTo(userId, VOICE_MUTE_MESSAGE, { muted: mutedRef.current })
-        if (localStream) room.addStreamTo(userId, localStream)
       }
     }
     const receiveMuteState = (message: RoomMessage) => {
