@@ -20,6 +20,8 @@ import { getHighScoresForGame, recordHighScores } from '../hooks/useHighScores'
 export interface GameBoardProps extends ComponentProps<'main'> {
   followPlayerTurns?: boolean
   voiceChat?: VoiceChatState
+  /** The online room's high score exchange, reached from the game menu. */
+  scoreExchange?: { panel: React.ReactNode; unreadCount: number }
 }
 
 interface GameActionButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
@@ -85,7 +87,13 @@ const InvestigateActionIcon = ({ cards }: { cards: Array<{ id: string; imageUrl:
   </span>
 )
 
-export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat, ...props }: GameBoardProps) => {
+export const GameBoard = ({
+  className = '',
+  followPlayerTurns = false,
+  voiceChat,
+  scoreExchange,
+  ...props
+}: GameBoardProps) => {
   const [investigateModalOpen, setInvestigateModalOpen] = useState(false)
   const [newTreasureCard, setNewTreasureCard] = useState<{
     card: TreasureCard
@@ -259,7 +267,11 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
 
   return (
     <>
-      <GameMetadata viewedPlayer={viewedPlayer} chat={onlineGame && voiceChat && <GameTableTalk p2pRoom={onlineGame.p2pRoom} voice={voiceChat} />} />
+      <GameMetadata
+        viewedPlayer={viewedPlayer}
+        chat={onlineGame && voiceChat && <GameTableTalk p2pRoom={onlineGame.p2pRoom} voice={voiceChat} />}
+        scoreExchange={scoreExchange}
+      />
       <div className="fixed bottom-2 left-2 landscape:left-18 z-65 flex max-w-[calc(100dvw-5rem)] flex-wrap gap-2 hover:z-80 focus-within:z-80 landscape:max-w-[calc(100dvw-10rem)]">
         {canControlViewedPlayer && isInvestigateChoice && (
           <GameActionButton

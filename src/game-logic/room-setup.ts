@@ -22,7 +22,7 @@ export const EXPLORER_COLORS = [
   'hue-rotate-[290deg] saturate-[3]',
 ] as const
 
-const BOARD_NAMES: BoardName[] = ['aghon', 'avenia', 'kazan', 'cnidaria', 'northProylia', 'xawskil']
+export const BOARD_NAMES: BoardName[] = ['aghon', 'avenia', 'kazan', 'cnidaria', 'northProylia', 'xawskil']
 
 export interface GameSetupMessageData {
   setup: RoomSetup

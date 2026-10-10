@@ -53,6 +53,9 @@ import { useVoiceChat } from '../hooks/useVoiceChat'
 import { TableTalkParticipants } from './TableTalkParticipants'
 import { TableTalkMicrophone } from './TableTalkMicrophone'
 import { TableTalkIcon } from './TableTalkIcon'
+import { useScoreExchange } from '../hooks/useScoreExchange'
+import { ScoreExchangeCard, ScoreExchangePanel, type ScoreExchangePlayer } from './ScoreExchange'
+import { ScoreComparisonDialog } from './ScoreComparison'
 
 interface ChatMessage {
   message: string
@@ -81,6 +84,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
   const userId = useUserId()
   const { userLookup } = usePlayerList()
   const voice = useVoiceChat(p2pRoom)
+  const scoreExchange = useScoreExchange(p2pRoom, (playerId) => userLookup[playerId]?.displayName ?? 'An explorer')
   const numericRoomId = Number(roomId)
   const gameStorageKey = Number.isInteger(numericRoomId) ? onlineGameStorageKey(numericRoomId) : null
   const savedGame = useStoredGame(gameStorageKey)
@@ -271,6 +275,24 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
     (member.id === currentMember?.id || peerStates[member.id] === 'connected')
 
   const connectedMembers = room.members.filter(isMemberConnected)
+  const scoreExchangePlayers: ScoreExchangePlayer[] = acceptedMembers
+    .filter((member) => member.player_id !== userId)
+    .map((member) => ({
+      userId: member.player_id,
+      name: userLookup[member.player_id]?.displayName ?? 'Explorer',
+      avatarUrl: userLookup[member.player_id]?.avatarUrl,
+      connected: isMemberConnected(member),
+    }))
+  const scoreComparison = scoreExchange.comparing && (
+    <ScoreComparisonDialog
+      key={scoreExchange.comparing.id}
+      share={scoreExchange.comparing}
+      fromName={scoreExchange.playerName(scoreExchange.comparing.fromUserId)}
+      fromAvatarUrl={userLookup[scoreExchange.comparing.fromUserId]?.avatarUrl}
+      myAvatarUrl={userId ? userLookup[userId]?.avatarUrl : undefined}
+      onClose={scoreExchange.closeComparison}
+    />
+  )
   const connectedPeerCount = connectedMembers.filter((member) => member.id !== currentMember?.id).length
   const canChat = connectedPeerCount > 0
   const connectionLabel = sessionError
@@ -293,17 +315,30 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
 
   if (gameActive && gameStorageKey && p2pRoom && hasRoomSession) {
     return (
-      <GameStateProvider
-        key={room.id}
-        serializedGame={savedGame}
-        autoAdvance={isHost}
-        storageKey={gameStorageKey}
-        resetGame={() => removeStoredGame(gameStorageKey)}
-      >
-        <OnlineGameStateProvider p2pRoom={p2pRoom}>
-          <GameBoard className={className} voiceChat={voice} {...props} />
-        </OnlineGameStateProvider>
-      </GameStateProvider>
+      <>
+        <GameStateProvider
+          key={room.id}
+          serializedGame={savedGame}
+          autoAdvance={isHost}
+          storageKey={gameStorageKey}
+          resetGame={() => removeStoredGame(gameStorageKey)}
+        >
+          <OnlineGameStateProvider p2pRoom={p2pRoom}>
+            <GameBoard
+              className={className}
+              voiceChat={voice}
+              scoreExchange={{
+                panel: (
+                  <ScoreExchangePanel exchange={scoreExchange} players={scoreExchangePlayers} canSend={hasRoomSession} />
+                ),
+                unreadCount: scoreExchange.unreadCount,
+              }}
+              {...props}
+            />
+          </OnlineGameStateProvider>
+        </GameStateProvider>
+        {scoreComparison}
+      </>
     )
   }
 
@@ -525,6 +560,8 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
               </ExpeditionButton>
             </section>
           )}
+
+          <ScoreExchangeCard exchange={scoreExchange} players={scoreExchangePlayers} canSend={hasRoomSession} />
 
           {isHost && (
             <footer className="mt-auto border-t border-amber-100/10 pt-5">
@@ -752,6 +789,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
           </button>
         )}
       </div>
+      {scoreComparison}
     </Main>
   )
 }

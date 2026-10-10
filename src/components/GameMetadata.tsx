@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import React, { ComponentType, Fragment, SVGProps, useEffect, useRef, useState } from 'react'
-import { HomeIcon, TrophyIcon } from '@heroicons/react/24/outline'
+import { ArrowsRightLeftIcon, HomeIcon, TrophyIcon } from '@heroicons/react/24/outline'
 import { Button } from '@8thday/react'
 import { useNavigate } from 'react-router-dom'
 import type { Objective } from '../game-logic/Objective'
@@ -29,7 +29,7 @@ import { InvestigateCardDetail } from './InvestigateCardDetail'
 import { MetadataDialog } from './MetadataDialog'
 import { ObjectiveCardDisplay } from './ObjectiveCardDisplay'
 
-type MetadataCategory = 'active-card' | 'home' | 'player' | 'objectives'
+type MetadataCategory = 'active-card' | 'home' | 'player' | 'objectives' | 'score-exchange'
 type MetadataIcon = ComponentType<SVGProps<SVGSVGElement>>
 
 // Ctrl/Cmd + key
@@ -214,7 +214,16 @@ const PlayerStuffButton = ({
   )
 }
 
-export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; chat?: React.ReactNode }) => {
+export const GameMetadata = ({
+  viewedPlayer,
+  chat,
+  scoreExchange,
+}: {
+  viewedPlayer: Player
+  chat?: React.ReactNode
+  /** Online games: the high score exchange panel, reached from the game menu. */
+  scoreExchange?: { panel: React.ReactNode; unreadCount: number }
+}) => {
   const { gameState } = useGameState()
   const [openCategory, setOpenCategory] = useState<MetadataCategory | null>(null)
   const objectiveAwards = useRef<string>()
@@ -280,6 +289,7 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
             label="Game Menu"
             selected={openCategory === 'home'}
             onClick={() => setOpenCategory('home')}
+            badge={scoreExchange && <UnreadBadge count={scoreExchange.unreadCount} />}
           />
         </div>
         {chat && <div className="pointer-events-auto">{chat}</div>}
@@ -325,7 +335,22 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
       </nav>
 
       {openCategory === 'active-card' && <ExplorerMatModal player={player} onClose={() => setOpenCategory(null)} />}
-      {openCategory === 'home' && <HomeDialog onClose={() => setOpenCategory(null)} />}
+      {openCategory === 'home' && (
+        <HomeDialog
+          onClose={() => setOpenCategory(null)}
+          scoreExchangeUnread={scoreExchange?.unreadCount}
+          onOpenScoreExchange={scoreExchange && (() => setOpenCategory('score-exchange'))}
+        />
+      )}
+      {openCategory === 'score-exchange' && scoreExchange && (
+        <MetadataDialog title="High Score Exchange" eyebrow="Trade With The Table" onClose={() => setOpenCategory(null)}>
+          <div className="flex h-full overflow-y-auto p-4 phone-landscape:p-2">
+            <div className="m-auto w-full max-w-xl rounded-2xl border border-amber-100/20 bg-black/25 p-4 shadow-xl sm:p-6 phone-landscape:p-3">
+              {scoreExchange.panel}
+            </div>
+          </div>
+        </MetadataDialog>
+      )}
       {openCategory === 'player' && <PlayerStuffDialog player={player} onClose={() => setOpenCategory(null)} />}
       {openCategory === 'objectives' && <ObjectivesDialog onClose={() => setOpenCategory(null)} />}
     </>
@@ -344,7 +369,22 @@ const KEYBOARD_SHORTCUTS = [
   ['Esc', 'Close dialogs'],
 ]
 
-const HomeDialog = ({ onClose }: { onClose(): void }) => {
+const UnreadBadge = ({ count }: { count: number }) =>
+  count > 0 ? (
+    <span className="absolute -right-1 -top-1 flex min-h-6 min-w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-red-500 px-1.5 text-[0.65rem] font-black leading-none text-white">
+      {count}
+    </span>
+  ) : null
+
+const HomeDialog = ({
+  onClose,
+  scoreExchangeUnread = 0,
+  onOpenScoreExchange,
+}: {
+  onClose(): void
+  scoreExchangeUnread?: number
+  onOpenScoreExchange?(): void
+}) => {
   const navigate = useNavigate()
   const { gameState, resetGame } = useGameState()
   // Only local games keep high scores for now.
@@ -391,6 +431,24 @@ const HomeDialog = ({ onClose }: { onClose(): void }) => {
                 <span className="block text-lg font-black">Multiplayer Lobby</span>
                 <span className="block text-sm text-slate-600">Game stays saved.</span>
               </button>
+              {onOpenScoreExchange && (
+                <button
+                  type="button"
+                  className="relative flex items-center gap-3 rounded-xl border border-amber-100/25 bg-[#f5edcf]/95 p-4 text-left text-slate-900 shadow transition hover:-translate-y-0.5 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200 sm:col-span-2 phone-landscape:col-span-2"
+                  onClick={onOpenScoreExchange}
+                >
+                  <ArrowsRightLeftIcon className="h-7 w-7 shrink-0 text-amber-900" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block text-lg font-black">High Score Exchange</span>
+                    <span className="block text-sm text-slate-600">
+                      {scoreExchangeUnread
+                        ? `${scoreExchangeUnread} new from the table.`
+                        : 'Share, request, and compare charts with the table.'}
+                    </span>
+                  </span>
+                  <UnreadBadge count={scoreExchangeUnread} />
+                </button>
+              )}
             </div>
 
             <div className="hidden pointer-fine:block mt-4 rounded-lg border border-amber-100/20 bg-black/20 px-3 py-2 text-sm text-amber-50/80">
