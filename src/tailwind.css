@@ -105,6 +105,34 @@
   --spacing-content: calc(100vh - 3rem);
   --default-ring-width: 3px;
   --default-ring-color: #3b82f6;
+
+  /* Celebrates a new top score on the scoreboard. */
+  --animate-top-score-glow: top-score-glow 2.4s ease-in-out infinite;
+  --animate-top-score-shimmer: top-score-shimmer 3s ease-in-out infinite;
+
+  @keyframes top-score-glow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 4px var(--color-amber-300),
+        0 0 0.75rem 0.15rem rgb(252 211 77 / 0.45);
+    }
+    50% {
+      box-shadow:
+        0 0 0 4px var(--color-amber-100),
+        0 0 1.5rem 0.4rem rgb(252 211 77 / 0.9);
+    }
+  }
+
+  @keyframes top-score-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    55%,
+    100% {
+      transform: translateX(100%);
+    }
+  }
 }
 
 /* Restore the v3 Preflight defaults changed by v4. */

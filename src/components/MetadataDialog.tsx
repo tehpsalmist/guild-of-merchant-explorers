@@ -8,9 +8,17 @@ export interface MetadataDialogProps {
   eyebrow?: string
   title: string
   onClose(): void
+  /** For dialogs with a "Continue" button: pressing Enter triggers it. */
+  onContinue?(): void
 }
 
-export const MetadataDialog = ({ children, eyebrow = 'Guild Records', title, onClose }: MetadataDialogProps) => {
+export const MetadataDialog = ({
+  children,
+  eyebrow = 'Guild Records',
+  title,
+  onClose,
+  onContinue,
+}: MetadataDialogProps) => {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -19,6 +27,22 @@ export const MetadataDialog = ({ children, eyebrow = 'Guild Records', title, onC
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [onClose])
+
+  useEffect(() => {
+    if (!onContinue) return
+
+    const continueOnEnter = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.repeat || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+
+      // Also stops Enter from activating whatever button still has focus behind the dialog.
+      event.preventDefault()
+      onContinue()
+    }
+
+    window.addEventListener('keydown', continueOnEnter)
+    return () => window.removeEventListener('keydown', continueOnEnter)
+  }, [onContinue])
 
   return (
     <Modal

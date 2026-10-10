@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import React, { ComponentType, SVGProps, useEffect, useRef, useState } from 'react'
-import { HomeIcon } from '@heroicons/react/24/outline'
+import React, { ComponentType, Fragment, SVGProps, useEffect, useRef, useState } from 'react'
+import { HomeIcon, TrophyIcon } from '@heroicons/react/24/outline'
 import { Button } from '@8thday/react'
 import { useNavigate } from 'react-router-dom'
 import type { Objective } from '../game-logic/Objective'
 import type { Player } from '../game-logic/GameState'
 import type { InvestigateCard } from '../game-logic/Cards'
 import { useGameState } from '../hooks/useGameState'
+import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
+import { getHighScoresForGame } from '../hooks/useHighScores'
 import {
   blockImage,
   coinImage,
@@ -19,14 +21,24 @@ import {
   treasureChestImage,
   villageImage,
 } from '../images'
+import { boards } from './BoardSelectionCards'
 import { ExplorerBlock } from './ExplorerBlock'
 import { ExplorerMatModal } from './ExplorerMatModal'
+import { HighScoreList } from './HighScores'
 import { InvestigateCardDetail } from './InvestigateCardDetail'
 import { MetadataDialog } from './MetadataDialog'
 import { ObjectiveCardDisplay } from './ObjectiveCardDisplay'
 
 type MetadataCategory = 'active-card' | 'home' | 'player' | 'objectives'
 type MetadataIcon = ComponentType<SVGProps<SVGSVGElement>>
+
+// Ctrl/Cmd + key
+const CATEGORY_SHORTCUTS: Partial<Record<string, MetadataCategory>> = {
+  o: 'objectives',
+  a: 'active-card',
+  l: 'player',
+  h: 'home',
+}
 
 interface MetadataButtonProps {
   icon: MetadataIcon
@@ -241,9 +253,15 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
   useEffect(() => {
     const openFromKeyboard = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
-      if (!event.shiftKey) return
-      if (event.key.toLowerCase() === 'w') setOpenCategory('objectives')
-      if (event.key.toLowerCase() === 'd') setOpenCategory('player')
+
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
+
+      const category = CATEGORY_SHORTCUTS[event.key.toLowerCase()]
+      if (!category) return
+
+      // Take these over from the browser (open file, select all, address bar, history).
+      event.preventDefault()
+      setOpenCategory((current) => (current === category ? null : category))
     }
 
     window.addEventListener('keydown', openFromKeyboard)
@@ -314,9 +332,24 @@ export const GameMetadata = ({ viewedPlayer, chat }: { viewedPlayer: Player; cha
   )
 }
 
+const KEYBOARD_SHORTCUTS = [
+  ['Ctrl/Cmd + O', 'Objectives'],
+  ['Ctrl/Cmd + A', 'Active card'],
+  ['Ctrl/Cmd + L', 'Player stuff'],
+  ['Ctrl/Cmd + H', 'Game menu'],
+  ['Ctrl/Cmd + ← / →', 'Switch player'],
+  ['Ctrl/Cmd + Z', 'Undo'],
+  ['Ctrl/Cmd + Enter', 'End turn (once out of moves)'],
+  ['Enter', 'Continue'],
+  ['Esc', 'Close dialogs'],
+]
+
 const HomeDialog = ({ onClose }: { onClose(): void }) => {
   const navigate = useNavigate()
-  const { resetGame } = useGameState()
+  const { gameState, resetGame } = useGameState()
+  // Only local games keep high scores for now.
+  const isLocalGame = !useOptionalOnlineGameState()
+  const board = boards.find(({ name }) => name === gameState.boardName)
 
   const quitGame = () => {
     resetGame()
@@ -325,54 +358,92 @@ const HomeDialog = ({ onClose }: { onClose(): void }) => {
 
   return (
     <MetadataDialog title="Game Menu" eyebrow="Where To Next?" onClose={onClose}>
-      <div className="flex h-full items-center justify-center overflow-y-auto p-4">
-        <div className="w-full max-w-lg rounded-2xl border border-amber-100/20 bg-black/25 p-4 shadow-xl sm:p-6 phone-landscape:p-3">
-          <div className="mb-5 text-center phone-landscape:mb-3">
-            <HomeIcon className="mx-auto mb-2 h-10 w-10 text-amber-100" aria-hidden="true" />
-            <p className="text-sm text-amber-50/75">
-              All games are auto-saved. Leave and return without losing progress.
-            </p>
-          </div>
+      <div className="flex h-full overflow-y-auto p-4">
+        <div
+          className={clsx(
+            'm-auto grid w-full items-start gap-4',
+            'max-w-lg',
+            isLocalGame && 'lg:max-w-5xl lg:grid-cols-2 phone-landscape:max-w-5xl phone-landscape:grid-cols-2',
+          )}
+        >
+          <div className="rounded-2xl border border-amber-100/20 bg-black/25 p-4 shadow-xl sm:p-6 phone-landscape:p-3">
+            <div className="mb-5 text-center phone-landscape:mb-3">
+              <HomeIcon className="mx-auto mb-2 h-10 w-10 text-amber-100" aria-hidden="true" />
+              <p className="text-sm text-amber-50/75">
+                All games are auto-saved. Leave and return without losing progress.
+              </p>
+            </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 phone-landscape:grid-cols-2">
-            <button
-              type="button"
-              className="rounded-xl border border-amber-100/25 bg-[#f5edcf]/95 p-4 text-left text-slate-900 shadow transition hover:-translate-y-0.5 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
-              onClick={() => navigate('/')}
+            <div className="grid gap-3 sm:grid-cols-2 phone-landscape:grid-cols-2">
+              <button
+                type="button"
+                className="rounded-xl border border-amber-100/25 bg-[#f5edcf]/95 p-4 text-left text-slate-900 shadow transition hover:-translate-y-0.5 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                onClick={() => navigate('/')}
+              >
+                <span className="block text-lg font-black">Navigate Home</span>
+                <span className="block text-sm text-slate-600">Game stays saved.</span>
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-amber-100/25 bg-[#f5edcf]/95 p-4 text-left text-slate-900 shadow transition hover:-translate-y-0.5 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                onClick={() => navigate('/online/lobby')}
+              >
+                <span className="block text-lg font-black">Multiplayer Lobby</span>
+                <span className="block text-sm text-slate-600">Game stays saved.</span>
+              </button>
+            </div>
+
+            <div className="hidden pointer-fine:block mt-4 rounded-lg border border-amber-100/20 bg-black/20 px-3 py-2 text-sm text-amber-50/80">
+              <p className="font-bold text-amber-50">Keyboard shortcuts</p>
+              <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                {KEYBOARD_SHORTCUTS.map(([keys, action]) => (
+                  <Fragment key={keys}>
+                    <dt className="whitespace-nowrap font-semibold text-amber-50">{keys}</dt>
+                    <dd>{action}</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
+
+            <a
+              className="mx-auto mt-4 block w-fit rounded-lg px-3 py-2 text-sm font-semibold text-amber-50 underline decoration-amber-200/50 underline-offset-4 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://www.alderac.com/wp-content/uploads/2022/08/TGOME-Rulebook_web.pdf"
             >
-              <span className="block text-lg font-black">Navigate Home</span>
-              <span className="block text-sm text-slate-600">Game stays saved.</span>
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-amber-100/25 bg-[#f5edcf]/95 p-4 text-left text-slate-900 shadow transition hover:-translate-y-0.5 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200"
-              onClick={() => navigate('/online/lobby')}
+              Read Game Instructions
+            </a>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-red-200/20 pt-4 phone-landscape:mt-3 phone-landscape:pt-3">
+              <p className="max-w-xs text-sm text-red-100/75">Permanently deletes this game’s saved data.</p>
+              <Button variant="destructive" onClick={quitGame}>
+                Quit & Delete Game
+              </Button>
+            </div>
+          </div>
+
+          {isLocalGame && (
+            <section
+              className="rounded-2xl border border-amber-100/20 bg-black/25 p-4 shadow-xl sm:p-6 phone-landscape:p-3"
+              aria-labelledby="home-high-scores-title"
             >
-              <span className="block text-lg font-black">Multiplayer Lobby</span>
-              <span className="block text-sm text-slate-600">Game stays saved.</span>
-            </button>
-          </div>
-
-          <div className="hidden pointer-fine:block mt-4 rounded-lg border border-amber-100/20 bg-black/20 px-3 py-2 text-sm text-amber-50/80">
-            <p className="font-bold text-amber-50">Keyboard shortcuts</p>
-            <p>Shift + W: objectives · Shift + D: player details · Ctrl/Cmd + Z: undo · Esc: close dialogs</p>
-          </div>
-
-          <a
-            className="mx-auto mt-4 block w-fit rounded-lg px-3 py-2 text-sm font-semibold text-amber-50 underline decoration-amber-200/50 underline-offset-4 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-200"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://www.alderac.com/wp-content/uploads/2022/08/TGOME-Rulebook_web.pdf"
-          >
-            Read Game Instructions
-          </a>
-
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-red-200/20 pt-4 phone-landscape:mt-3 phone-landscape:pt-3">
-            <p className="max-w-xs text-sm text-red-100/75">Permanently deletes this game’s saved data.</p>
-            <Button variant="destructive" onClick={quitGame}>
-              Quit & Delete Game
-            </Button>
-          </div>
+              <div className="mb-4 flex items-center gap-3 phone-landscape:mb-2">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100/10 text-amber-200">
+                  <TrophyIcon className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-[0.65rem] font-bold uppercase tracking-[0.24em] text-amber-100/50">{board?.label}</p>
+                  <h2 className="font-serif text-2xl text-amber-50" id="home-high-scores-title">
+                    High Scores
+                  </h2>
+                </div>
+              </div>
+              <HighScoreList
+                boardName={gameState.boardName}
+                highlightedScores={gameState.gameOver ? getHighScoresForGame(gameState) : undefined}
+              />
+            </section>
+          )}
         </div>
       </div>
     </MetadataDialog>

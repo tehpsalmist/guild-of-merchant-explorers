@@ -10,7 +10,7 @@ export interface TreasureCardDialogProps {
 }
 
 export const TreasureCardDialog = ({ card, playerName, onClose }: TreasureCardDialogProps) => (
-  <MetadataDialog title="Treasure Discovered" eyebrow="Ruins Explored" onClose={onClose}>
+  <MetadataDialog title="Treasure Discovered" eyebrow="Ruins Explored" onClose={onClose} onContinue={onClose}>
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3 p-3 sm:gap-4 sm:p-5 phone-landscape:gap-2 phone-landscape:p-2">
       <div className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-2xl border border-amber-100/20 bg-black/25 p-2 shadow-inner sm:p-4 phone-landscape:p-1.5">
         <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-1/2 -translate-y-1/2 rounded-full bg-amber-200/15 blur-3xl" />

@@ -15,6 +15,7 @@ import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
 import { GameTableTalk } from './GameTableTalk'
 import { useUserId } from '@nhost/react'
 import type { VoiceChatState } from '../hooks/useVoiceChat'
+import { getHighScoresForGame, recordHighScores } from '../hooks/useHighScores'
 
 export interface GameBoardProps extends ComponentProps<'main'> {
   followPlayerTurns?: boolean
@@ -146,9 +147,16 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
     setViewedPlayerId(viewedPlayer.id)
   }, [viewedPlayer.id])
 
-  const viewNextPlayer = () => {
+  // Only local games keep high scores for now.
+  const isLocalGame = !onlineGame
+  useEffect(() => {
+    if (isLocalGame && gameState.gameOver) recordHighScores(gameState.boardName, getHighScoresForGame(gameState))
+  }, [isLocalGame, gameState, gameState.gameOver])
+
+  const viewAdjacentPlayer = (offset: 1 | -1) => {
     const currentIndex = gameState.players.indexOf(viewedPlayer)
-    const nextPlayer = gameState.players[(currentIndex + 1) % gameState.players.length]
+    const playerCount = gameState.players.length
+    const nextPlayer = gameState.players[(currentIndex + offset + playerCount) % playerCount]
 
     if (nextPlayer) setViewedPlayerId(nextPlayer.id)
   }
@@ -220,10 +228,35 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
     viewedPlayer.moveHistory.getPlacedHexes()[viewedPlayer.cardPhase]?.size ===
     viewedPlayer.currentCardRules?.[viewedPlayer.cardPhase]?.limit
   const noLegalMoves = isEndOfPhase || viewedPlayer.board.getFlatHexes().every((h) => !h.isExplorable())
+  const canEndTurn =
+    canControlViewedPlayer &&
+    viewedPlayer.mode === 'exploring' &&
+    !!viewedPlayer.currentCardRules &&
+    (!gameState.currentExplorerCard || (viewedPlayer.currentCardRules?.length ?? 1) - 1 === viewedPlayer.cardPhase)
   const investigateActionCards =
     (gameState.era < 3
       ? viewedPlayer.investigateCardCandidates
       : viewedPlayer.investigateCards.keptCards) ?? []
+
+  // Shortcut for End Turn, only once there's nothing left to place (so it never needs the confirm prompt).
+  useEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.repeat) return
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    if (!canEndTurn || !noLegalMoves || newTreasureCard) return
+
+    e.preventDefault()
+    viewedPlayer.selectMove({ action: 'confirm-turn' })
+  })
+
+  useEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    // The treasure reveal belongs to the player who drew it, and it covers the on-screen switch button too.
+    if (gameState.players.length < 2 || newTreasureCard) return
+
+    e.preventDefault()
+    viewAdjacentPlayer(e.key === 'ArrowRight' ? 1 : -1)
+  })
 
   return (
     <>
@@ -237,23 +270,20 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
             onClick={() => setInvestigateModalOpen(true)}
           />
         )}
-        {canControlViewedPlayer && viewedPlayer.mode === 'exploring' &&
-          viewedPlayer.currentCardRules &&
-          (!gameState.currentExplorerCard ||
-            (viewedPlayer.currentCardRules?.length ?? 1) - 1 === viewedPlayer.cardPhase) && (
-            <GameActionButton
-              label={gameState.soloMode ? 'Next Card' : 'End Turn'}
-              highlighted={noLegalMoves}
-              onClick={() => {
-                if (
-                  noLegalMoves ||
-                  confirm('There are legal moves left on the board, are you sure you want to end your turn?')
-                ) {
-                  viewedPlayer.selectMove({ action: 'confirm-turn' })
-                }
-              }}
-            />
-          )}
+        {canEndTurn && (
+          <GameActionButton
+            label={gameState.soloMode ? 'Next Card' : 'End Turn'}
+            highlighted={noLegalMoves}
+            onClick={() => {
+              if (
+                noLegalMoves ||
+                confirm('There are legal moves left on the board, are you sure you want to end your turn?')
+              ) {
+                viewedPlayer.selectMove({ action: 'confirm-turn' })
+              }
+            }}
+          />
+        )}
         {canControlViewedPlayer && viewedPlayer.mode === 'exploring' &&
           viewedPlayer.currentCardRules &&
           (viewedPlayer.currentCardRules?.length ?? 1) - 1 !== viewedPlayer.cardPhase && (
@@ -286,7 +316,7 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
           key={viewedPlayer.id}
           player={viewedPlayer}
           isActive={canControlViewedPlayer}
-          onViewNextPlayer={gameState.players.length > 1 ? viewNextPlayer : undefined}
+          onViewNextPlayer={gameState.players.length > 1 ? () => viewAdjacentPlayer(1) : undefined}
         />
       </main>
       {canControlViewedPlayer && isPlayerChoice && userPromptOpen && !newTreasureCard && (

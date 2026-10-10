@@ -1,9 +1,13 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button, Modal } from '@8thday/react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { SparklesIcon, TrophyIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useGameState } from '../hooks/useGameState'
+import { useOptionalOnlineGameState } from '../hooks/useOnlineGameState'
+import { getHighScoreRank, getHighScoresForGame, useHighScores } from '../hooks/useHighScores'
 import { plankPanelHorizontal } from '../images'
 import { ExplorerBlock } from './ExplorerBlock'
+import { boards } from './BoardSelectionCards'
+import { HighScoresDialog } from './HighScores'
 import clsx from 'clsx'
 
 export interface ScoreBoardModalProps {
@@ -13,6 +17,11 @@ export interface ScoreBoardModalProps {
 
 export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) => {
   const { gameState } = useGameState()
+  const isLocalGame = !useOptionalOnlineGameState()
+  const [highScoresOpen, setHighScoresOpen] = useState(false)
+  const highScores = useHighScores(gameState.boardName)
+  const gameScores = getHighScoresForGame(gameState)
+  const board = boards.find(({ name }) => name === gameState.boardName)
   const allDone = gameState.players.every((player) => player.scoreBoard.doneRevealing)
   const highestScore = Math.max(...gameState.players.map((player) => player.coins))
   const revealedStats = gameState.players.reduce(
@@ -86,11 +95,15 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
         </header>
 
         <div className="relative grid min-h-0 flex-1 snap-x snap-mandatory auto-cols-[minmax(17rem,1fr)] grid-flow-col gap-4 overflow-auto p-3 sm:p-5 mobile:auto-cols-[100%] mobile:gap-2 mobile:p-2 phone-landscape:auto-cols-[100%] phone-landscape:gap-2 phone-landscape:p-2">
-          {gameState.players.map((player) => {
+          {gameState.players.map((player, index) => {
             const totalStat = player.scoreBoard.stats.at(-1)
             const detailStats = player.scoreBoard.stats.slice(0, -1)
             const isWinner = allDone && !gameState.soloMode && player.coins === highestScore
             const winners = gameState.players.filter((candidate) => candidate.coins === highestScore).length
+            // Hold the chart reveal until the tally finishes, so it doesn't spoil the final count.
+            const highScoreRank = isLocalGame && allDone ? getHighScoreRank(highScores, gameScores[index]) : -1
+            const madeChart = highScoreRank >= 0
+            const isTopScore = highScoreRank === 0
 
             return (
               <article
@@ -98,24 +111,58 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
                 className={clsx(
                   'relative flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-[#f5edcf]/95 text-slate-800 shadow-xl',
                   'snap-center mobile:rounded-xl phone-landscape:grid phone-landscape:grid-cols-[8rem_minmax(0,1fr)_9rem] phone-landscape:grid-rows-1 phone-landscape:rounded-xl',
-                  isWinner ? 'border-amber-300 ring-2 ring-amber-300/60' : 'border-amber-950/30',
+                  isTopScore
+                    ? 'border-amber-200 ring-4 ring-amber-300 motion-safe:animate-top-score-glow'
+                    : madeChart
+                      ? 'border-emerald-300 ring-2 ring-emerald-300/80'
+                      : isWinner
+                        ? 'border-amber-300 ring-2 ring-amber-300/60'
+                        : 'border-amber-950/30',
                 )}
               >
                 {isWinner && (
-                  <div className="absolute right-0 top-0 rounded-bl-xl bg-amber-500 px-3 py-1 text-[0.65rem] font-black uppercase tracking-widest text-amber-950">
+                  <div className="absolute right-0 top-0 z-10 rounded-bl-xl bg-amber-500 px-3 py-1 text-[0.65rem] font-black uppercase tracking-widest text-amber-950">
                     {winners > 1 ? 'Tied Winner' : 'Winner'}
                   </div>
                 )}
 
-                <div className="flex min-h-16 items-center gap-3 border-b border-amber-950/20 bg-slate-800/90 px-4 py-3 text-amber-50 mobile:min-h-14 mobile:py-2 phone-landscape:min-h-0 phone-landscape:flex-col phone-landscape:justify-center phone-landscape:gap-2 phone-landscape:border-b-0 phone-landscape:border-r phone-landscape:px-2 phone-landscape:py-2 phone-landscape:text-center">
+                <div
+                  className={clsx(
+                    'relative flex min-h-16 items-center gap-3 overflow-hidden border-b border-amber-950/20 px-4 py-3 mobile:min-h-14 mobile:py-2 phone-landscape:min-h-0 phone-landscape:flex-col phone-landscape:justify-center phone-landscape:gap-2 phone-landscape:border-b-0 phone-landscape:border-r phone-landscape:px-2 phone-landscape:py-2 phone-landscape:text-center',
+                    isTopScore
+                      ? 'bg-linear-to-r from-amber-700 via-amber-300 to-amber-700 text-amber-950'
+                      : madeChart
+                        ? 'bg-emerald-900/90 text-amber-50'
+                        : 'bg-slate-800/90 text-amber-50',
+                  )}
+                >
+                  {isTopScore && <ShimmerSweep />}
                   <ExplorerBlock
                     color={player.color}
                     className="h-9 w-9 object-contain mobile:h-8 mobile:w-8 phone-landscape:h-10 phone-landscape:w-10"
                   />
                   <div className="min-w-0 phone-landscape:w-full">
-                    <p className="truncate text-xs font-semibold uppercase tracking-widest text-amber-100/65">
-                      Explorer
-                    </p>
+                    {madeChart ? (
+                      <p
+                        className={clsx(
+                          'flex items-center gap-1 text-xs font-black uppercase tracking-widest phone-landscape:justify-center',
+                          isTopScore ? 'text-amber-950' : 'text-emerald-200',
+                        )}
+                      >
+                        {isTopScore ? (
+                          <SparklesIcon className="h-4 w-4 shrink-0 phone-landscape:hidden" aria-hidden="true" />
+                        ) : (
+                          <TrophyIcon className="h-4 w-4 shrink-0 phone-landscape:hidden" aria-hidden="true" />
+                        )}
+                        <span className="truncate phone-landscape:whitespace-normal phone-landscape:leading-tight">
+                          {isTopScore ? 'New Top Score!' : `High Score #${highScoreRank + 1}`}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="truncate text-xs font-semibold uppercase tracking-widest text-amber-100/65">
+                        Explorer
+                      </p>
+                    )}
                     <h2 className="truncate text-xl font-bold phone-landscape:text-base">{player.displayName}</h2>
                   </div>
                 </div>
@@ -151,10 +198,24 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
                   })}
                 </div>
 
-                <div className="m-3 mt-1 flex min-h-20 items-center justify-between rounded-xl border border-amber-700/30 bg-amber-100/80 px-4 py-3 shadow-inner mobile:m-2 mobile:mt-1 mobile:min-h-16 mobile:py-2 phone-landscape:m-2 phone-landscape:min-h-0 phone-landscape:flex-col phone-landscape:justify-center phone-landscape:px-2 phone-landscape:py-2 phone-landscape:text-center">
+                <div
+                  className={clsx(
+                    'relative m-3 mt-1 flex min-h-20 items-center justify-between overflow-hidden rounded-xl border px-4 py-3 shadow-inner mobile:m-2 mobile:mt-1 mobile:min-h-16 mobile:py-2 phone-landscape:m-2 phone-landscape:min-h-0 phone-landscape:flex-col phone-landscape:justify-center phone-landscape:px-2 phone-landscape:py-2 phone-landscape:text-center',
+                    isTopScore
+                      ? 'border-amber-500 bg-linear-to-br from-amber-200 via-amber-50 to-amber-300'
+                      : 'border-amber-700/30 bg-amber-100/80',
+                  )}
+                >
+                  {isTopScore && <ShimmerSweep />}
                   <div className="phone-landscape:shrink-0">
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-900/65">Final Coins</p>
-                    <p className="text-sm text-amber-950/60 phone-landscape:hidden">Expedition total</p>
+                    <p className="text-sm text-amber-950/60 phone-landscape:hidden">
+                      {isTopScore
+                        ? `Top of the ${board?.label} chart`
+                        : madeChart
+                          ? `#${highScoreRank + 1} on the ${board?.label} chart`
+                          : 'Expedition total'}
+                    </p>
                   </div>
                   <div
                     className={clsx(
@@ -179,7 +240,18 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
           })}
         </div>
 
-        <footer className="relative flex shrink-0 flex-col items-center gap-2 border-t border-white/20 bg-black/20 px-4 py-3 mobile:py-2 phone-landscape:py-1">
+        <footer className="relative flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-white/20 bg-black/20 px-4 py-3 mobile:py-2 phone-landscape:py-1">
+          {isLocalGame && board && (
+            <Button
+              className="phone-landscape:py-1!"
+              variant="dismissive"
+              PreIcon={TrophyIcon}
+              disabled={!allDone}
+              onClick={() => setHighScoresOpen(true)}
+            >
+              High Scores
+            </Button>
+          )}
           <Button
             className="phone-landscape:py-1!"
             disabled={!allDone}
@@ -189,7 +261,18 @@ export const ScoreBoardModal = ({ onClose, onNewGame }: ScoreBoardModalProps) =>
             {allDone ? 'Start a New Game' : 'Tallying Scores…'}
           </Button>
         </footer>
+
+        {highScoresOpen && board && (
+          <HighScoresDialog board={board} highlightedScores={gameScores} onClose={() => setHighScoresOpen(false)} />
+        )}
       </section>
     </Modal>
   )
 }
+
+const ShimmerSweep = () => (
+  <span
+    className="pointer-events-none absolute inset-0 bg-linear-to-r from-transparent via-white/50 to-transparent animate-top-score-shimmer motion-reduce:hidden"
+    aria-hidden="true"
+  />
+)

@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import clsx from 'clsx'
-import { CheckIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, EyeIcon, TrophyIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Modal } from '@8thday/react'
 import type { BoardName } from '../game-logic/GameState'
 import { aghonBoard, aveniaBoard, cnidariaBoard, kazanBoard, northProyliaBoard, xawskilBaseBoard } from '../images'
+import { HighScoresDialog } from './HighScores'
 
 export interface BoardOption {
   name: BoardName
@@ -24,6 +25,7 @@ interface BoardSelectionCardsProps {
   value: BoardName | ''
   onChange(board: BoardName): void
   canSelect?: boolean
+  showHighScores?: boolean
   className?: string
 }
 
@@ -31,9 +33,11 @@ export const BoardSelectionCards = ({
   value,
   onChange,
   canSelect = true,
+  showHighScores = false,
   className = 'grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3',
 }: BoardSelectionCardsProps) => {
   const [previewedBoard, setPreviewedBoard] = useState<BoardOption>()
+  const [highScoresBoard, setHighScoresBoard] = useState<BoardOption>()
 
   return (
     <>
@@ -97,11 +101,23 @@ export const BoardSelectionCards = ({
               >
                 <EyeIcon className="h-4 w-4" aria-hidden="true" />
               </button>
+              {showHighScores && (
+                <button
+                  type="button"
+                  className="absolute bottom-2 right-11 flex h-8 w-8 items-center justify-center rounded-full border border-amber-100/30 bg-slate-950/85 text-amber-200 shadow-lg backdrop-blur-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                  onClick={() => setHighScoresBoard(board)}
+                  aria-label={`View ${board.label} high scores`}
+                  title={`${board.label} high scores`}
+                >
+                  <TrophyIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </article>
           )
         })}
       </div>
       {previewedBoard && <BoardPreviewDialog board={previewedBoard} onClose={() => setPreviewedBoard(undefined)} />}
+      {highScoresBoard && <HighScoresDialog board={highScoresBoard} onClose={() => setHighScoresBoard(undefined)} />}
     </>
   )
 }

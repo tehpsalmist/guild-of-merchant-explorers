@@ -174,7 +174,7 @@ export const LocalGame = ({ className = '', ...props }: LocalGameProps) => {
                 </div>
               </div>
 
-              <BoardSelectionCards value={boardName} onChange={setBoardName} />
+              <BoardSelectionCards value={boardName} onChange={setBoardName} showHighScores />
             </fieldset>
           </div>
 
