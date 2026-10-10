@@ -147,11 +147,10 @@ export const GameBoard = ({ className = '', followPlayerTurns = false, voiceChat
     setViewedPlayerId(viewedPlayer.id)
   }, [viewedPlayer.id])
 
-  // Only local games keep high scores for now.
-  const isLocalGame = !onlineGame
+  // Online games record every player at the table too: each device holds the full final state.
   useEffect(() => {
-    if (isLocalGame && gameState.gameOver) recordHighScores(gameState.boardName, getHighScoresForGame(gameState))
-  }, [isLocalGame, gameState, gameState.gameOver])
+    if (gameState.gameOver) recordHighScores(gameState.boardName, getHighScoresForGame(gameState))
+  }, [gameState, gameState.gameOver])
 
   const viewAdjacentPlayer = (offset: 1 | -1) => {
     const currentIndex = gameState.players.indexOf(viewedPlayer)

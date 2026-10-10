@@ -34,7 +34,7 @@ export const HighScoreList = ({ boardName, highlightedScores = [], className }: 
           className,
         )}
       >
-        No high scores on this board yet. Finish a local game to claim the top spot.
+        No high scores on this board yet. Finish a game to claim the top spot.
       </p>
     )
   }
