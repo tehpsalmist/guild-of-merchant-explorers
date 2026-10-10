@@ -6,7 +6,12 @@ import {
   parseHighScoreRecords,
   readHighScoreRecords,
 } from './useHighScores'
-import { notifyHighScoresRequested, notifyHighScoresShared, notifyScoreExchange } from '../components/ScoreExchangeToasts'
+import {
+  dismissHighScoresSharedNotification,
+  notifyHighScoresRequested,
+  notifyHighScoresShared,
+  notifyScoreExchange,
+} from '../components/ScoreExchangeToasts'
 
 export const HIGH_SCORES_SHARE_MESSAGE = 'high-scores-share'
 export const HIGH_SCORES_REQUEST_MESSAGE = 'high-scores-request'
@@ -48,13 +53,17 @@ const isRoomMessage = (data: unknown, roomId: number): data is { roomId: number 
 export const useScoreExchange = (p2pRoom: P2PRoom | undefined, playerName: (userId: string) => string) => {
   const [shares, setShares] = useState<SharedHighScores[]>([])
   const [requests, setRequests] = useState<HighScoresRequest[]>([])
-  const [comparingId, setComparingId] = useState<string | null>(null)
+  // Held separately from the inbox, so a comparison stays open after its share is resolved.
+  const [comparing, setComparing] = useState<SharedHighScores | null>(null)
   const playerNameRef = useRef(playerName)
   playerNameRef.current = playerName
 
   const openComparison = (shareId: string) => {
-    setComparingId(shareId)
-    setShares((current) => current.map((share) => (share.id === shareId ? { ...share, seen: true } : share)))
+    const share = shares.find(({ id }) => id === shareId)
+    if (!share) return
+
+    setComparing(share)
+    setShares((current) => current.map((other) => (other.id === shareId ? { ...other, seen: true } : other)))
   }
 
   const sendScores = (room: P2PRoom, recipient: ScoreExchangeRecipient) => {
@@ -94,7 +103,13 @@ export const useScoreExchange = (p2pRoom: P2PRoom | undefined, playerName: (user
 
   const dismissShare = (shareId: string) => {
     setShares((current) => current.filter((share) => share.id !== shareId))
-    setComparingId((current) => (current === shareId ? null : current))
+    setComparing((current) => (current?.id === shareId ? null : current))
+  }
+
+  /** Once everything worth keeping from a share is merged, there's nothing left to compare. */
+  const resolveShare = (share: SharedHighScores) => {
+    setShares((current) => current.filter(({ id }) => id !== share.id))
+    dismissHighScoresSharedNotification(share.fromUserId)
   }
 
   // Latest callbacks for toasts, which outlive the render that created them.
@@ -152,14 +167,15 @@ export const useScoreExchange = (p2pRoom: P2PRoom | undefined, playerName: (user
     shares,
     requests,
     unreadCount: requests.length + shares.filter((share) => !share.seen).length,
-    comparing: shares.find((share) => share.id === comparingId) ?? null,
+    comparing,
     playerName,
     shareScores,
     requestScores,
     dismissRequest,
     dismissShare,
+    resolveShare,
     openComparison,
-    closeComparison: () => setComparingId(null),
+    closeComparison: () => setComparing(null),
   }
 }
 

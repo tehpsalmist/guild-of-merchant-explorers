@@ -88,6 +88,11 @@ export const notifyScoreExchange = (title: string, description?: string, failed 
     { duration: failed ? 6000 : 4000 },
   )
 
+// One toast per sender: a newer share replaces the older one.
+const shareToastId = (fromUserId: string) => `high-scores-share-${fromUserId}`
+
+export const dismissHighScoresSharedNotification = (fromUserId: string) => toast.dismiss(shareToastId(fromUserId))
+
 export const notifyHighScoresShared = ({
   fromUserId,
   fromName,
@@ -122,8 +127,7 @@ export const notifyHighScoresShared = ({
         onDismiss={() => toast.dismiss(id)}
       />
     ),
-    // One toast per sender: a newer share replaces the older one.
-    { id: `high-scores-share-${fromUserId}`, duration: 12000 },
+    { id: shareToastId(fromUserId), duration: 12000 },
   )
 
 export const notifyHighScoresRequested = ({

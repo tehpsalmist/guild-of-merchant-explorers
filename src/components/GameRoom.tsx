@@ -291,6 +291,7 @@ export const GameRoom = ({ className = '', ...props }: GameRoomProps) => {
       fromAvatarUrl={userLookup[scoreExchange.comparing.fromUserId]?.avatarUrl}
       myAvatarUrl={userId ? userLookup[userId]?.avatarUrl : undefined}
       onClose={scoreExchange.closeComparison}
+      onFullyMerged={() => scoreExchange.comparing && scoreExchange.resolveShare(scoreExchange.comparing)}
     />
   )
   const connectedPeerCount = connectedMembers.filter((member) => member.id !== currentMember?.id).length

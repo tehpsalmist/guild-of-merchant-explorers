@@ -22,6 +22,8 @@ export interface ScoreComparisonDialogProps {
   fromAvatarUrl?: string
   myAvatarUrl?: string
   onClose(): void
+  /** Called once a merge leaves nothing in this share that would change the player's charts. */
+  onFullyMerged(): void
 }
 
 const PODIUM_CLASSES = [
@@ -53,6 +55,7 @@ export const ScoreComparisonDialog = ({
   fromAvatarUrl,
   myAvatarUrl,
   onClose,
+  onFullyMerged,
 }: ScoreComparisonDialogProps) => {
   const records = useHighScoreRecords()
   const [justMerged, setJustMerged] = useState<HighScore[]>([])
@@ -98,6 +101,8 @@ export const ScoreComparisonDialog = ({
 
     mergeHighScoreRecords(Object.fromEntries(targets.map(({ board, theirs }) => [board.name, theirs])))
     setJustMerged(gained)
+    // Each board merges independently, so whatever these boards gained is all that's left to take.
+    if (gained.length === totalGained) onFullyMerged()
     notifyScoreExchange(
       `Merged ${gained.length} of ${fromName}'s ${gained.length === 1 ? 'score' : 'scores'}`,
       targets.length === 1
