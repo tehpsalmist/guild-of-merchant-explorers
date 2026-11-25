@@ -34,6 +34,7 @@ import {
   coin1Sound,
   coin2Sound,
 } from '../audio'
+import type { SoundEffect } from './AudioTools'
 import { explorerCardDataMapping } from '../data/cards/explorer-cards'
 import { treasureCardDataLookup } from '../data/cards/treasure-cards'
 
@@ -1272,7 +1273,7 @@ export class MoveHistory {
     return this.currentMoves.length
   }
 
-  playAudio(sfx: HTMLAudioElement) {
+  playAudio(sfx: SoundEffect) {
     if (this.player.replaying && !this.player.replayingEffects) {
       return
     }

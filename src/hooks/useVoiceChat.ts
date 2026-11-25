@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from '@8thday/react'
 import type { P2PRoom, RoomMessage, RoomPeer, RoomStream } from '../p2p-connection/p2p-room'
+import { setAudioSessionType } from '../game-logic/AudioTools'
 
 const VOICE_MUTE_MESSAGE = 'voice-mute'
 
@@ -80,6 +81,8 @@ export const useVoiceChat = (room?: P2PRoom) => {
     document.addEventListener('keydown', resumeAudio)
 
     const startAudio = async () => {
+      // A live microphone is a call: let the browser pick the session it needs, instead of the game's 'ambient' one.
+      setAudioSessionType('auto')
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
         if (disposed) {
@@ -113,6 +116,7 @@ export const useVoiceChat = (room?: P2PRoom) => {
         room.getPeers().forEach(({ userId }) => room.removeStreamFrom(userId, stream))
         stream.getTracks().forEach((track) => track.stop())
       }
+      setAudioSessionType('ambient')
     }
   }, [room])
 

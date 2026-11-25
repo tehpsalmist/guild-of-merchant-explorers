@@ -1,5 +1,7 @@
 import { AudioTools } from '../game-logic/AudioTools'
 
+export const audioTools = new AudioTools()
+
 const placeBlock1URL = new URL('./place-block-1.wav', import.meta.url)
 const placeBlock2URL = new URL('./place-block-2.wav', import.meta.url)
 const villageURL = new URL('./village.wav', import.meta.url)
@@ -19,29 +21,21 @@ const uiCardOpenURL = new URL('./ui-card-open.wav', import.meta.url)
 const uiWoodCloseURL = new URL('./ui-wood-close.wav', import.meta.url)
 const uiWoodOpenURL = new URL('./ui-wood-open.wav', import.meta.url)
 
-export const uiCardCloseSound = new Audio(uiCardCloseURL.href)
-export const uiCardOpenSound = new Audio(uiCardOpenURL.href)
-export const uiWoodCloseSound = new Audio(uiWoodCloseURL.href)
-export const uiWoodOpenSound = new Audio(uiWoodOpenURL.href)
+export const uiCardCloseSound = audioTools.createSound(uiCardCloseURL)
+export const uiCardOpenSound = audioTools.createSound(uiCardOpenURL)
+export const uiWoodCloseSound = audioTools.createSound(uiWoodCloseURL)
+export const uiWoodOpenSound = audioTools.createSound(uiWoodOpenURL)
 
-export const placeBlock1Sound = new Audio(placeBlock1URL.href)
-export const placeBlock2Sound = new Audio(placeBlock2URL.href)
-export const villageSound = new Audio(villageURL.href)
-export const coin1Sound = new Audio(coin1URL.href)
-export const coin2Sound = new Audio(coin2URL.href)
-export const completeObjectiveSound = new Audio(completeObjectiveURL.href)
-export const towerSound = new Audio(towerURL.href)
-export const treasureSound = new Audio(treasureURL.href)
-export const crystalSound = new Audio(crystalURL.href)
-export const tradeSound = new Audio(tradeURL.href)
+export const placeBlock1Sound = audioTools.createSound(placeBlock1URL)
+export const placeBlock2Sound = audioTools.createSound(placeBlock2URL)
+export const villageSound = audioTools.createSound(villageURL)
+export const coin1Sound = audioTools.createSound(coin1URL)
+export const coin2Sound = audioTools.createSound(coin2URL)
+export const completeObjectiveSound = audioTools.createSound(completeObjectiveURL)
+export const towerSound = audioTools.createSound(towerURL)
+export const treasureSound = audioTools.createSound(treasureURL)
+export const crystalSound = audioTools.createSound(crystalURL)
+export const tradeSound = audioTools.createSound(tradeURL)
 
-export const audioTools = new AudioTools()
-
-// super easy usage: placeBlockSFX.play()
-//
-// for sounds that will be played in quick succession, use the currentTime property to reset the sound:
-// placeBlockSFX.currentTime = 0
-// this will start the sound over and allow it to be played again immediately
-//
-// I made a helper function in AudioTools to do this for you:
-// audioTools.play(placeBlockSFX)
+// usage: audioTools.play(placeBlock1Sound), or audioTools.play(placeBlock1Sound, 0.6) for a quieter one.
+// Plays overlap, so the same sound can fire in quick succession.
